@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="24dp"
+    android:gravity="center_horizontal">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Oyun Ayarları"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="32dp"
+        android:layout_marginTop="32dp"/>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="1. Grid Boyutunu Seçin:"
+        android:textSize="18sp"
+        android:textStyle="bold"/>
+
+    <RadioGroup
+        android:id="@+id/rgGridSize"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="24dp"
+        android:layout_marginTop="8dp">
+
+        <RadioButton
+            android:id="@+id/rbGrid10"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="10x10 Grid (Kolay)"
+            android:checked="true"/>
+
+        <RadioButton
+            android:id="@+id/rbGrid8"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="8x8 Grid (Orta)"/>
+
+        <RadioButton
+            android:id="@+id/rbGrid6"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="6x6 Grid (Zor)"/>
+    </RadioGroup>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="2. Hamle Sayısını Seçin:"
+        android:textSize="18sp"
+        android:textStyle="bold"/>
+
+    <RadioGroup
+        android:id="@+id/rgMoveCount"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="32dp"
+        android:layout_marginTop="8dp">
+
+        <RadioButton
+            android:id="@+id/rbMove25"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="25 Hamle (Kolay)"
+            android:checked="true"/>
+
+        <RadioButton
+            android:id="@+id/rbMove20"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="20 Hamle (Orta)"/>
+
+        <RadioButton
+            android:id="@+id/rbMove15"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="15 Hamle (Zor)"/>
+    </RadioGroup>
+
+    <Button
+        android:id="@+id/btnOyunuBaslat"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Hadi Başlayalım!"
+        android:textSize="18sp"
+        android:padding="12dp"/>
+
+</LinearLayout>
