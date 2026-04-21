@@ -10,38 +10,41 @@ import com.example.kelimeoyunu.R;
 
 public class GameSettingsActivity extends AppCompatActivity {
 
-    private RadioGroup rgGridSize, rgMoveCount;
-    private Button btnOyunuBaslat;
+    private int selectedGridSize = 6; // Varsayılan
+    private int selectedMoveCount = 15; // Varsayılan
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_game_settings);
 
-        rgGridSize = findViewById(R.id.rgGridSize);
-        rgMoveCount = findViewById(R.id.rgMoveCount);
-        btnOyunuBaslat = findViewById(R.id.btnOyunuBaslat);
+        RadioGroup rgGridSize = findViewById(R.id.rgGridSize);
+        RadioGroup rgMoveCount = findViewById(R.id.rgMoveCount);
+        Button btnStart = findViewById(R.id.btnStartGame);
 
-        btnOyunuBaslat.setOnClickListener(v -> {
-            int gridSize = 10; // Varsayılan değer
-            int moveCount = 25; // Varsayılan değer
+        // 1. Grid Boyutu Seçimi
+        rgGridSize.setOnCheckedChangeListener((group, checkedId) -> {
+            if (checkedId == R.id.rb6x6) selectedGridSize = 6;
+            else if (checkedId == R.id.rb8x8) selectedGridSize = 8;
+            else if (checkedId == R.id.rb10x10) selectedGridSize = 10;
+        });
 
-            // Hangi Grid seçildi?
-            int selectedGridId = rgGridSize.getCheckedRadioButtonId();
-            if (selectedGridId == R.id.rbGrid8) gridSize = 8;
-            else if (selectedGridId == R.id.rbGrid6) gridSize = 6;
+        // 2. Hamle Sayısı Seçimi
+        rgMoveCount.setOnCheckedChangeListener((group, checkedId) -> {
+            if (checkedId == R.id.rb15) selectedMoveCount = 15;
+            else if (checkedId == R.id.rb20) selectedMoveCount = 20;
+            else if (checkedId == R.id.rb25) selectedMoveCount = 25;
+        });
 
-            // Hangi Hamle seçildi?
-            int selectedMoveId = rgMoveCount.getCheckedRadioButtonId();
-            if (selectedMoveId == R.id.rbMove20) moveCount = 20;
-            else if (selectedMoveId == R.id.rbMove15) moveCount = 15;
-
-            // Seçilen değerleri Oyun ekranına (GameActivity) gönder
+        // 3. OYUNU BAŞLAT
+        btnStart.setOnClickListener(v -> {
             Intent intent = new Intent(GameSettingsActivity.this, GameActivity.class);
-            intent.putExtra("GRID_SIZE", gridSize);
-            intent.putExtra("MOVE_COUNT", moveCount);
+
+            // KRİTİK: İsimlerin GameActivity'deki getIntExtra ile aynı olması lazım
+            intent.putExtra("gridSize", selectedGridSize);
+            intent.putExtra("moveCount", selectedMoveCount);
+
             startActivity(intent);
-            finish(); // Ayarlar ekranını kapat
         });
     }
 }
