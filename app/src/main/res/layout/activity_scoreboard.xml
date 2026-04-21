@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="?android:attr/colorBackground">
+
+    <!-- Toolbar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="16dp"
+        android:gravity="center_vertical">
+
+        <ImageButton
+            android:id="@+id/btnBack"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="@drawable/bg_pill_gray"
+            android:src="@drawable/ic_arrow_back"
+            android:contentDescription="Geri" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:text="Skor Tablosu"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="?android:attr/textColorPrimary" />
+    </LinearLayout>
+
+    <!-- Sıralama chip'leri -->
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:scrollbars="none"
+        android:paddingHorizontal="16dp"
+        android:layout_marginBottom="8dp">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/chipScore"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="En Yüksek Puan"
+                android:textSize="13sp"
+                android:padding="8dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_chip_active"
+                android:textColor="#EEEDFE" />
+
+            <TextView
+                android:id="@+id/chipDate"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="En Yeni"
+                android:textSize="13sp"
+                android:padding="8dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_chip_inactive"
+                android:textColor="#5F5E5A" />
+
+            <TextView
+                android:id="@+id/chipWord"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="En Uzun Kelime"
+                android:textSize="13sp"
+                android:padding="8dp"
+                android:background="@drawable/bg_chip_inactive"
+                android:textColor="#5F5E5A" />
+        </LinearLayout>
+    </HorizontalScrollView>
+
+    <!-- Oyun listesi -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvScoreboard"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingTop="8dp"
+        android:clipToPadding="false" />
+
+</LinearLayout>

@@ -42,7 +42,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     public void saveGame(int gridSize, int score, int wordCount, String longestWord, int duration) {
         try {
-            SQLiteDatabase db = this.getWritableDatabase();
+            SQLiteDatabase db = this.getWritableDatabase(); // bağlantıyı aç
             ContentValues values = new ContentValues();
 
             SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
@@ -56,12 +56,11 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             values.put("duration", duration);
 
             long rowId = db.insert("games", null, values);
-            db.close();
+            // db.close(); ← KALDIR
 
-            // Logcat üzerinden kontrol için:
             android.util.Log.d("DB_LOG", "Oyun kaydedildi. Satır ID: " + rowId);
         } catch (Exception e) {
             android.util.Log.e("DB_LOG", "Hata oluştu: " + e.getMessage());
         }
     }
-}
+    }

@@ -45,8 +45,8 @@ public class MainMenuActivity extends AppCompatActivity {
 
         // 3. SKOR TABLOSU BUTONU (Şimdilik yapım aşamasında)
         btnSkorTablosu.setOnClickListener(v -> {
-            // İleride SkorActivity'ye yönlendireceğiz
-            Toast.makeText(MainMenuActivity.this, "Skor Tablosu henüz eklenmedi!", Toast.LENGTH_SHORT).show();
+            Intent intent = new Intent(MainMenuActivity.this, ScoreboardActivity.class);
+            startActivity(intent);
         });
 
         // EKSTRA: Sol üstteki kullanıcı ismine basılı tutunca veya tıklayınca hesaptan çıkış yapma

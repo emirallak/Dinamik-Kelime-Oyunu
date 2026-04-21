@@ -29,6 +29,7 @@
         <activity android:name=".ui.GameSettingsActivity" />
         <activity android:name=".ui.GameActivity" />
         <activity android:name=".ui.MarketActivity" />
+        <activity android:name=".ui.ScoreboardActivity" />
 
     </application>
 

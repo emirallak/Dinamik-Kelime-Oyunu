@@ -110,4 +110,7 @@ public interface AppDao {
 
     void updateJoker(JokerEntity joker);
 
+    @Query("SELECT * FROM games ORDER BY score DESC")
+    List<GameEntity> getAllGamesByScore();
+
 }
