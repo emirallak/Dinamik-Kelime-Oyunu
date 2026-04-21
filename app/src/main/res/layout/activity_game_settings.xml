@@ -4,91 +4,103 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:padding="24dp"
-    android:gravity="center_horizontal">
+    android:background="#F5F5F5"
+    android:gravity="center">
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Oyun Ayarları"
-        android:textSize="24sp"
+        android:textSize="28sp"
         android:textStyle="bold"
-        android:layout_marginBottom="32dp"
-        android:layout_marginTop="32dp"/>
+        android:textColor="#333333"
+        android:layout_marginBottom="32dp"/>
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="1. Grid Boyutunu Seçin:"
+        android:text="Grid Boyutu Seçin:"
         android:textSize="18sp"
-        android:textStyle="bold"/>
+        android:textColor="#555555"
+        android:textStyle="bold"
+        android:layout_marginBottom="8dp"/>
 
     <RadioGroup
         android:id="@+id/rgGridSize"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="24dp"
-        android:layout_marginTop="8dp">
+        android:orientation="horizontal"
+        android:layout_marginBottom="24dp">
 
         <RadioButton
-            android:id="@+id/rbGrid10"
+            android:id="@+id/rb6x6"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="10x10 Grid (Kolay)"
-            android:checked="true"/>
+            android:layout_weight="1"
+            android:checked="true"
+            android:text="6x6"/>
 
         <RadioButton
-            android:id="@+id/rbGrid8"
+            android:id="@+id/rb8x8"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="8x8 Grid (Orta)"/>
+            android:layout_weight="1"
+            android:text="8x8"/>
 
         <RadioButton
-            android:id="@+id/rbGrid6"
+            android:id="@+id/rb10x10"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="6x6 Grid (Zor)"/>
+            android:layout_weight="1"
+            android:text="10x10"/>
     </RadioGroup>
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="2. Hamle Sayısını Seçin:"
+        android:text="Hamle Sayısı Seçin:"
         android:textSize="18sp"
-        android:textStyle="bold"/>
+        android:textColor="#555555"
+        android:textStyle="bold"
+        android:layout_marginBottom="8dp"/>
 
     <RadioGroup
         android:id="@+id/rgMoveCount"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="32dp"
-        android:layout_marginTop="8dp">
+        android:orientation="horizontal"
+        android:layout_marginBottom="40dp">
 
         <RadioButton
-            android:id="@+id/rbMove25"
+            android:id="@+id/rb15"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="25 Hamle (Kolay)"
-            android:checked="true"/>
+            android:layout_weight="1"
+            android:checked="true"
+            android:text="15"/>
 
         <RadioButton
-            android:id="@+id/rbMove20"
+            android:id="@+id/rb20"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="20 Hamle (Orta)"/>
+            android:layout_weight="1"
+            android:text="20"/>
 
         <RadioButton
-            android:id="@+id/rbMove15"
+            android:id="@+id/rb25"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="15 Hamle (Zor)"/>
+            android:layout_weight="1"
+            android:text="25"/>
     </RadioGroup>
 
     <Button
-        android:id="@+id/btnOyunuBaslat"
+        android:id="@+id/btnStartGame"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="60dp"
         android:text="Hadi Başlayalım!"
         android:textSize="18sp"
-        android:padding="12dp"/>
+        android:backgroundTint="#4CAF50"
+        android:textColor="#FFFFFF"/>
 
 </LinearLayout>

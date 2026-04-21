@@ -1,13 +1,13 @@
 package com.example.kelimeoyunu.utils;
 
 import java.util.HashMap;
-import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 public class ScoreCalculator {
     private static final Map<Character, Integer> POINTS = new HashMap<>();
+    private static final Locale TR_LOCALE = new Locale("tr", "TR"); // YENİ
 
-    // Dökümandaki Harf Puan Tablosu
     static {
         POINTS.put('A', 1);  POINTS.put('B', 3);  POINTS.put('C', 4);  POINTS.put('Ç', 4);
         POINTS.put('D', 3);  POINTS.put('E', 1);  POINTS.put('F', 7);  POINTS.put('G', 5);
@@ -20,26 +20,24 @@ public class ScoreCalculator {
     }
 
     public static int getLetterScore(char c) {
-        return POINTS.getOrDefault(Character.toUpperCase(c), 0);
+        // YENİ: Harfi Türkçe kuralına göre String olarak büyütüp ilk karakterini alıyoruz
+        String upperStr = String.valueOf(c).toUpperCase(TR_LOCALE);
+        return POINTS.getOrDefault(upperStr.charAt(0), 0);
     }
 
     public static int calculateBaseWordScore(String word) {
         int total = 0;
-        for (char c : word.toUpperCase().toCharArray()) {
+        // YENİ: Kelimeyi Türkçe kuralına göre büyüt
+        for (char c : word.toUpperCase(TR_LOCALE).toCharArray()) {
             total += getLetterScore(c);
         }
         return total;
     }
 
-    /**
-     * Dökümandaki COMBO kuralı:
-     * Ana kelimenin içindeki 3 ve daha uzun harfli alt kelimeleri bulur, puanlarını toplar.
-     */
     public static int calculateComboScore(String mainWord, DictionaryManager dict) {
         int totalComboScore = 0;
         int len = mainWord.length();
 
-        // Örn: SARI (len=4). Substringler: SAR, SARI, ARI
         for (int i = 0; i <= len - 3; i++) {
             for (int j = i + 3; j <= len; j++) {
                 String subWord = mainWord.substring(i, j);
