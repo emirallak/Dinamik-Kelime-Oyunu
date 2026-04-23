@@ -9,8 +9,15 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.kelimeoyunu.R;
+import com.example.kelimeoyunu.database.AppDatabase;
 import com.example.kelimeoyunu.database.DatabaseHelper;
+import com.example.kelimeoyunu.database.JokerEntity;
+import com.example.kelimeoyunu.database.UserEntity;
 import com.example.kelimeoyunu.utils.DictionaryManager;
+import com.example.kelimeoyunu.utils.SharedPrefsHelper;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class GameActivity extends AppCompatActivity implements GameBoardView.GameListener {
 
@@ -21,6 +28,8 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
     private GameBoardView gameBoardView;
     private DictionaryManager dictionaryManager;
     private DatabaseHelper dbHelper;
+    private AppDatabase appDatabase;
+    private volatile UserEntity currentUser;
 
     private int currentScore = 0;
     private int remainingMoves = 15;
@@ -36,6 +45,13 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
         setContentView(R.layout.activity_game);
 
         dbHelper = new DatabaseHelper(this);
+        appDatabase = AppDatabase.getInstance(this);
+
+        SharedPrefsHelper prefs = new SharedPrefsHelper(this);
+        String username = prefs.getUsername();
+        if (username != null) {
+            new Thread(() -> currentUser = appDatabase.appDao().getUserByName(username)).start();
+        }
 
         tvScore = findViewById(R.id.tvScore);
         tvMoveCount = findViewById(R.id.tvMoveCount);
@@ -60,9 +76,7 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
         }).start();
 
         if (btnUseJoker != null) {
-            btnUseJoker.setOnClickListener(v -> {
-                Toast.makeText(this, "Joker menüsü açılacak...", Toast.LENGTH_SHORT).show();
-            });
+            btnUseJoker.setOnClickListener(v -> showJokerDialog());
         }
 
         if (btnFinishGame != null) {
@@ -141,5 +155,90 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
             Toast.makeText(this, "Hamle bitti! Skor kaydedildi.", Toast.LENGTH_LONG).show();
             finish();
         }
+    }
+
+    private void showJokerDialog() {
+        if (gameBoardView == null || currentUser == null) {
+            Toast.makeText(this, "Joker kullanımı şu anda hazır değil.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        new Thread(() -> {
+            JokerEntity shuffleJoker = appDatabase.appDao().getSpecificJoker(currentUser.id, "Harf Karıştırma");
+            JokerEntity changeLetterJoker = appDatabase.appDao().getSpecificJoker(currentUser.id, "Lolipop Kırıcı");
+            int shuffleCount = shuffleJoker != null ? shuffleJoker.quantity : 0;
+            int changeLetterCount = changeLetterJoker != null ? changeLetterJoker.quantity : 0;
+
+            runOnUiThread(() -> {
+                if (shuffleCount <= 0 && changeLetterCount <= 0) {
+                    Toast.makeText(this, "Kullanılabilir jokeriniz yok.", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
+                List<String> itemNames = new ArrayList<>();
+                List<String> jokerKeys = new ArrayList<>();
+                if (shuffleCount > 0) {
+                    itemNames.add("Harf Karıştırma (" + shuffleCount + ")");
+                    jokerKeys.add("Harf Karıştırma");
+                }
+                if (changeLetterCount > 0) {
+                    itemNames.add("Lolipop Kırıcı (" + changeLetterCount + ")");
+                    jokerKeys.add("Lolipop Kırıcı");
+                }
+
+                new AlertDialog.Builder(this)
+                        .setTitle("Joker Seç")
+                        .setItems(itemNames.toArray(new String[0]), (dialog, which) -> {
+                            String selectedJoker = jokerKeys.get(which);
+                            if ("Harf Karıştırma".equals(selectedJoker)) {
+                                consumeJoker(selectedJoker, () -> {
+                                    gameBoardView.shuffleBoard();
+                                    Toast.makeText(this, "Grid karıştırıldı.", Toast.LENGTH_SHORT).show();
+                                });
+                            } else if ("Lolipop Kırıcı".equals(selectedJoker)) {
+                                showChangeLetterCellDialog(selectedJoker);
+                            }
+                        })
+                        .show();
+            });
+        }).start();
+    }
+
+    private void showChangeLetterCellDialog(String jokerName) {
+        if (gameBoardView == null) return;
+
+        List<String> cellItems = new ArrayList<>();
+        List<int[]> coords = new ArrayList<>();
+        for (int r = 0; r < gridSize; r++) {
+            for (int c = 0; c < gridSize; c++) {
+                cellItems.add((r + 1) + ". Satır, " + (c + 1) + ". Sütun (" + gameBoardView.getLetterAt(r, c) + ")");
+                coords.add(new int[]{r, c});
+            }
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("Harf Değiştirilecek Hücre")
+                .setItems(cellItems.toArray(new String[0]), (dialog, which) -> {
+                    int[] selected = coords.get(which);
+                    consumeJoker(jokerName, () -> {
+                        gameBoardView.changeLetterAt(selected[0], selected[1]);
+                        Toast.makeText(this, "Harf değiştirildi.", Toast.LENGTH_SHORT).show();
+                    });
+                })
+                .show();
+    }
+
+    private void consumeJoker(String jokerName, Runnable onSuccess) {
+        if (currentUser == null) return;
+        new Thread(() -> {
+            JokerEntity joker = appDatabase.appDao().getSpecificJoker(currentUser.id, jokerName);
+            if (joker == null || joker.quantity <= 0) {
+                runOnUiThread(() -> Toast.makeText(this, "Bu joker tükenmiş.", Toast.LENGTH_SHORT).show());
+                return;
+            }
+            joker.quantity -= 1;
+            appDatabase.appDao().updateJoker(joker);
+            runOnUiThread(onSuccess);
+        }).start();
     }
 }
