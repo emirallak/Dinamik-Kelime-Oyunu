@@ -14,6 +14,7 @@ import com.example.kelimeoyunu.utils.LetterGenerator;
 import com.example.kelimeoyunu.utils.ScoreCalculator;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
@@ -240,13 +241,29 @@ public class GameBoardView extends View {
             int score = ScoreCalculator.calculateComboScore(word, dictionaryManager);
             GridCell lastCell = currentPath.get(currentPath.size() - 1);
             GridCell.SpecialPower powerToLeave = GridCell.SpecialPower.NONE;
+            List<GridCell> triggeredPowerCells = new ArrayList<>();
+            boolean[][] selectedCells = new boolean[gridSize][gridSize];
+            boolean[][] cellsToClear = new boolean[gridSize][gridSize];
 
             if (word.length() == 4) powerToLeave = GridCell.SpecialPower.ROW_CLEAR;
             else if (word.length() == 5) powerToLeave = GridCell.SpecialPower.AREA_EXPLODE;
             else if (word.length() == 6) powerToLeave = GridCell.SpecialPower.COLUMN_CLEAR;
             else if (word.length() >= 7) powerToLeave = GridCell.SpecialPower.MEGA_EXPLODE; // <- Hata buradaydı, düzeltildi.
 
-            for (GridCell cell : currentPath) cell.letter = ' ';
+            for (GridCell cell : currentPath) {
+                selectedCells[cell.row][cell.col] = true;
+                cellsToClear[cell.row][cell.col] = true;
+                if (cell.power != GridCell.SpecialPower.NONE) {
+                    triggeredPowerCells.add(cell);
+                }
+            }
+
+            for (GridCell cell : triggeredPowerCells) {
+                markPowerAffectedCells(cell.power, cell.row, cell.col, cellsToClear);
+            }
+
+            int extraScore = clearMarkedCells(cellsToClear, selectedCells);
+            score += extraScore;
 
             if (powerToLeave != GridCell.SpecialPower.NONE) {
                 cells[lastCell.row][lastCell.col].letter = LetterGenerator.getRandomLetter();
@@ -265,6 +282,48 @@ public class GameBoardView extends View {
             if (gameListener != null) gameListener.onInvalidWord();
         }
         clearSelection();
+    }
+
+    private void markPowerAffectedCells(GridCell.SpecialPower power, int centerRow, int centerCol, boolean[][] cellsToClear) {
+        switch (power) {
+            case ROW_CLEAR:
+                for (int c = 0; c < gridSize; c++) cellsToClear[centerRow][c] = true;
+                break;
+            case COLUMN_CLEAR:
+                for (int r = 0; r < gridSize; r++) cellsToClear[r][centerCol] = true;
+                break;
+            case AREA_EXPLODE:
+                markSquare(centerRow, centerCol, 1, cellsToClear);
+                break;
+            case MEGA_EXPLODE:
+                markSquare(centerRow, centerCol, 2, cellsToClear);
+                break;
+            default:
+                break;
+        }
+    }
+
+    private void markSquare(int centerRow, int centerCol, int radius, boolean[][] cellsToClear) {
+        for (int r = Math.max(0, centerRow - radius); r <= Math.min(gridSize - 1, centerRow + radius); r++) {
+            for (int c = Math.max(0, centerCol - radius); c <= Math.min(gridSize - 1, centerCol + radius); c++) {
+                cellsToClear[r][c] = true;
+            }
+        }
+    }
+
+    private int clearMarkedCells(boolean[][] cellsToClear, boolean[][] selectedCells) {
+        int extraScore = 0;
+        for (int r = 0; r < gridSize; r++) {
+            for (int c = 0; c < gridSize; c++) {
+                if (!cellsToClear[r][c]) continue;
+                if (!selectedCells[r][c] && cells[r][c].letter != ' ') {
+                    extraScore += ScoreCalculator.getLetterScore(cells[r][c].letter);
+                }
+                cells[r][c].letter = ' ';
+                cells[r][c].power = GridCell.SpecialPower.NONE;
+            }
+        }
+        return extraScore;
     }
 
     private void applyGravity() {
@@ -293,5 +352,40 @@ public class GameBoardView extends View {
         for (GridCell cell : currentPath) cell.isSelected = false;
         currentPath.clear();
         invalidate();
+    }
+
+    public void shuffleBoard() {
+        if (cells == null) return;
+        List<Character> letters = new ArrayList<>();
+        for (int r = 0; r < gridSize; r++) {
+            for (int c = 0; c < gridSize; c++) {
+                letters.add(cells[r][c].letter);
+            }
+        }
+        Collections.shuffle(letters, random);
+        int index = 0;
+        for (int r = 0; r < gridSize; r++) {
+            for (int c = 0; c < gridSize; c++) {
+                cells[r][c].letter = letters.get(index++);
+            }
+        }
+        clearSelection();
+        if (gameListener != null) gameListener.onGridAnalyzed(calculateAvailableWords());
+        invalidate();
+    }
+
+    public void changeLetterAt(int row, int col) {
+        if (cells == null) return;
+        if (row < 0 || row >= gridSize || col < 0 || col >= gridSize) return;
+        cells[row][col].letter = LetterGenerator.getRandomLetter();
+        clearSelection();
+        if (gameListener != null) gameListener.onGridAnalyzed(calculateAvailableWords());
+        invalidate();
+    }
+
+    public char getLetterAt(int row, int col) {
+        if (cells == null) return ' ';
+        if (row < 0 || row >= gridSize || col < 0 || col >= gridSize) return ' ';
+        return cells[row][col].letter;
     }
 }
