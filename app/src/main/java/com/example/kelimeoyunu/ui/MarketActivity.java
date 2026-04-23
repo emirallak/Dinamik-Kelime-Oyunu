@@ -1,6 +1,10 @@
 package com.example.kelimeoyunu.ui;
 
+import android.app.AlertDialog;
 import android.os.Bundle;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
@@ -22,12 +26,11 @@ public class MarketActivity extends AppCompatActivity {
 
     private TextView tvGoldAmount;
     private RecyclerView rvJokers;
-
     private AppDatabase db;
     private UserEntity currentUser;
-
+    private SharedPrefsHelper prefs;
     private MarketAdapter adapter;
-    private List<JokerItem> jokerList;
+    private List<JokerItem> jokerList = new ArrayList<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -36,88 +39,120 @@ public class MarketActivity extends AppCompatActivity {
 
         tvGoldAmount = findViewById(R.id.tvGoldAmount);
         rvJokers = findViewById(R.id.rvJokers);
-
         db = AppDatabase.getInstance(this);
-        SharedPrefsHelper prefs = new SharedPrefsHelper(this);
-
-        String username = prefs.getUsername();
-        if (username != null) {
-            currentUser = db.appDao().getUserByName(username);
-        }
-
-        if (currentUser == null) {
-            Toast.makeText(this, "Kullanıcı bilgisi bulunamadı!", Toast.LENGTH_SHORT).show();
-            finish();
-            return;
-        }
-
-        updateGoldText();
+        prefs = new SharedPrefsHelper(this);
 
         rvJokers.setLayoutManager(new LinearLayoutManager(this));
 
-        // Listeyi başlat ve veritabanıyla birleştir
-        jokerList = new ArrayList<>();
-        loadJokerData();
+        // Verileri arka planda güvenle yükle
+        initData();
 
-        adapter = new MarketAdapter(jokerList, this::buyJoker);
-        rvJokers.setAdapter(adapter);
+        if (tvGoldAmount != null) {
+            tvGoldAmount.setOnClickListener(v -> showBuyGoldDialog());
+        }
+    }
+
+    private void initData() {
+        new Thread(() -> {
+            String username = prefs.getUsername();
+            if (username != null) {
+                currentUser = db.appDao().getUserByName(username);
+
+                if (currentUser != null) {
+                    loadJokerDataFromDb();
+                    runOnUiThread(() -> {
+                        updateGoldText();
+                        adapter = new MarketAdapter(jokerList, this::buyJoker);
+                        rvJokers.setAdapter(adapter);
+                    });
+                } else {
+                    runOnUiThread(() -> Toast.makeText(this, "Kullanıcı bulunamadı!", Toast.LENGTH_SHORT).show());
+                }
+            }
+        }).start();
+    }
+
+    private void showBuyGoldDialog() {
+        View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_buy_gold, null);
+        AlertDialog paymentDialog = new AlertDialog.Builder(this).setView(dialogView).create();
+
+        Button btnConfirm = dialogView.findViewById(R.id.btnConfirmPurchase);
+        btnConfirm.setOnClickListener(v -> {
+            new Thread(() -> {
+                if (currentUser != null) {
+                    currentUser.gold += 1000;
+                    db.appDao().updateUser(currentUser);
+                    runOnUiThread(() -> {
+                        updateGoldText();
+                        Toast.makeText(this, "1000 Altın Eklendi! 💰", Toast.LENGTH_SHORT).show();
+                        paymentDialog.dismiss();
+                    });
+                }
+            }).start();
+        });
+        paymentDialog.show();
     }
 
     private void buyJoker(JokerItem item) {
-        if (currentUser.gold >= item.price) {
-            currentUser.gold -= item.price;
-            db.appDao().updateUser(currentUser);
 
-            JokerEntity ownedJoker = db.appDao().getSpecificJoker(currentUser.id, item.name);
-
-            if (ownedJoker == null) {
-                db.appDao().insertJoker(new JokerEntity(currentUser.id, item.name, 1));
-            } else {
-                ownedJoker.quantity += 1;
-                db.appDao().updateJoker(ownedJoker);
-            }
-
-            updateGoldText();
-
-            // YENİ: Verileri baştan yükle ve adaptöre ekrandaki rozetleri güncellemesini söyle
-            loadJokerData();
-            adapter.notifyDataSetChanged();
-
-        } else {
-            Toast.makeText(this, "Yeterli altınınız yok!", Toast.LENGTH_SHORT).show();
+        if (item.name.equals("1000 Altın Paketi"))
+        {
+            runOnUiThread(this::showBuyGoldDialog);
+            return;
         }
+        new Thread(() -> {
+            if (currentUser != null && currentUser.gold >= item.price) {
+                currentUser.gold -= item.price;
+                db.appDao().updateUser(currentUser);
+
+                JokerEntity ownedJoker = db.appDao().getSpecificJoker(currentUser.id, item.name);
+                if (ownedJoker == null) {
+                    db.appDao().insertJoker(new JokerEntity(currentUser.id, item.name, 1));
+                } else {
+                    ownedJoker.quantity += 1;
+                    db.appDao().updateJoker(ownedJoker);
+                }
+
+                // Listeyi güncelle ve UI'ı tazele
+                loadJokerDataFromDb();
+                runOnUiThread(() -> {
+                    updateGoldText();
+                    adapter.notifyDataSetChanged();
+                    Toast.makeText(this, item.name + " alındı!", Toast.LENGTH_SHORT).show();
+                });
+            } else {
+                runOnUiThread(() -> Toast.makeText(this, "Yetersiz Altın!", Toast.LENGTH_SHORT).show());
+            }
+        }).start();
     }
 
     private void updateGoldText() {
-        tvGoldAmount.setText("💰 Altın: " + currentUser.gold);
+        if (currentUser != null) {
+            tvGoldAmount.setText("💰 Altın: " + currentUser.gold);
+        }
     }
 
-    /**
-     * Veritabanından kullanıcının jokerlerini çeker ve arayüzdeki listeye sayılarla birlikte aktarır.
-     */
-    private void loadJokerData() {
+    private void loadJokerDataFromDb() {
         jokerList.clear();
-
-        // Kullanıcının veritabanındaki joker kayıtlarını al
         List<JokerEntity> ownedJokers = db.appDao().getUserJokers(currentUser.id);
 
-        addJokerToList("Balık", "Rastgele harfleri yok eder.", 100, "🐟", ownedJokers);
-        addJokerToList("Tekerlek", "Seçili satır ve sütunu yok eder.", 200, "🎡", ownedJokers);
-        addJokerToList("Lolipop Kırıcı", "Seçilen bir harfi yok eder.", 75, "🍭", ownedJokers);
-        addJokerToList("Serbest Değiştirme", "Temas eden iki harfin yerini değiştirir.", 125, "🔄", ownedJokers);
-        addJokerToList("Harf Karıştırma", "Griddeki harfleri rastgele karıştırır.", 300, "🔀", ownedJokers);
-        addJokerToList("Parti Güçlendiricisi", "Tüm harfleri yok edip yenilerini düşürür.", 400, "🎉", ownedJokers);
+        // Mevcut jokerler...
+        addToList("Balık", "Rastgele harfleri yok eder.", 100, "🐟", ownedJokers);
+        addToList("Tekerlek", "Seçili satır ve sütunu yok eder.", 200, "🎡", ownedJokers);
+        addToList("Lolipop Kırıcı", "Seçilen bir harfi yok eder.", 75, "🍭", ownedJokers);
+        addToList("Serbest Değiştirme", "Temas eden iki harfin yerini değiştirir.", 125, "🔄", ownedJokers);
+        addToList("Harf Karıştırma", "Griddeki harfleri rastgele karıştırır.", 300, "🔀", ownedJokers);
+        addToList("Parti Güçlendiricisi", "Tüm harfleri yok edip yenilerini düşürür.", 400, "🎉", ownedJokers);
+
+        // YENİ: En sona Altın Paketi ekliyoruz (Fiyatı 0 yapıyoruz çünkü bu bir satın alma tetikleyicisi)
+        jokerList.add(new JokerItem("1000 Altın Paketi", "Hemen 1000 altın yükle!", 0, "💰", 0));
     }
 
-    private void addJokerToList(String name, String desc, int price, String icon, List<JokerEntity> ownedJokers) {
-        int quantity = 0;
-        // DB listesinde bu isimde joker var mı kontrol et, varsa miktarını al
-        for (JokerEntity entity : ownedJokers) {
-            if (entity.jokerName.equals(name)) {
-                quantity = entity.quantity;
-                break;
-            }
+    private void addToList(String name, String desc, int price, String icon, List<JokerEntity> owned) {
+        int qty = 0;
+        for (JokerEntity j : owned) {
+            if (j.jokerName.equals(name)) { qty = j.quantity; break; }
         }
-        jokerList.add(new JokerItem(name, desc, price, icon, quantity));
+        jokerList.add(new JokerItem(name, desc, price, icon, qty));
     }
 }

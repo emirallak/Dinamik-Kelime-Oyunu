@@ -32,4 +32,17 @@ public class SharedPrefsHelper {
         editor.clear();
         editor.apply();
     }
+
+
+    // Sayı (Integer) kaydetmek için metod
+    public void saveInt(String key, int value) {
+        android.content.SharedPreferences.Editor editor = sharedPreferences.edit();
+        editor.putInt(key, value);
+        editor.apply();
+    }
+
+    // Kayıtlı sayıyı okumak için metod (Eğer yoksa defaultValue döner)
+    public int getInt(String key, int defaultValue) {
+        return sharedPreferences.getInt(key, defaultValue);
+    }
 }
