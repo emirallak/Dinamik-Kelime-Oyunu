@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Combo çarpanı metni: büyüyerek belirir, kısa bekler, solar -->
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:ordering="together">
+
+    <scale
+        android:duration="250"
+        android:fromXScale="0.3"
+        android:fromYScale="0.3"
+        android:toXScale="1.5"
+        android:toYScale="1.5"
+        android:pivotX="50%"
+        android:pivotY="50%"
+        android:interpolator="@android:anim/overshoot_interpolator" />
+
+    <alpha
+        android:duration="250"
+        android:fromAlpha="0.0"
+        android:toAlpha="1.0" />
+
+    <alpha
+        android:startOffset="500"
+        android:duration="300"
+        android:fromAlpha="1.0"
+        android:toAlpha="0.0" />
+
+</set>
