@@ -405,7 +405,7 @@ public class GameBoardView extends View {
     // ====================== TOUCH ======================
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        if (cells == null || isAnimating || isShuffling || isSwapping || isFalling || isShaking || isFishActive) return false;
+        if (cells == null || isAnyAnimationActive()) return false;
 
         float x = event.getX(), y = event.getY();
         int col = (int) (x / cellSize), row = (int) (y / cellSize);
@@ -632,7 +632,7 @@ public class GameBoardView extends View {
             boolean hasBombPower = false;
 
             GridCell.SpecialPower powerToLeave = GridCell.SpecialPower.NONE;
-            if (word.length() == 4)      powerToLeave = GridCell.SpecialPower.ROW_CLEAR;
+            if (word.length() == 4) powerToLeave = GridCell.SpecialPower.ROW_CLEAR;
             else if (word.length() == 5) powerToLeave = GridCell.SpecialPower.AREA_EXPLODE;
             else if (word.length() == 6) powerToLeave = GridCell.SpecialPower.COLUMN_CLEAR;
             else if (word.length() >= 7) powerToLeave = GridCell.SpecialPower.MEGA_EXPLODE;
@@ -1025,6 +1025,7 @@ public class GameBoardView extends View {
         if (cells == null || isShuffling) return;
         isShuffling = true;
         shuffleRotation = 0f;
+        final boolean[] shuffled = {false}; // karıştırma tam bir kez yapılsın
 
         ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
         animator.setDuration(700);
@@ -1037,8 +1038,9 @@ public class GameBoardView extends View {
                 shuffleProgress = (t - 0.5f) * 2f;   // Büyü
                 shuffleRotation = (1f - t) * 720f;   // Geri döndür
             }
-            // Tam ortada harfleri karıştır
-            if (t >= 0.49f && t <= 0.51f) {
+            // Animasyonun tam ortasında (ilk kez) harfleri karıştır
+            if (t >= 0.5f && !shuffled[0]) {
+                shuffled[0] = true;
                 List<Character> letters = new ArrayList<>();
                 List<GridCell.SpecialPower> powers = new ArrayList<>();
                 for (int r = 0; r < gridSize; r++) {
@@ -1074,6 +1076,12 @@ public class GameBoardView extends View {
     }
 
     // ====================== YARDIMCI METODLAR ======================
+
+    /** Herhangi bir animasyon aktif mi? Dokunmatik girişi engeller. */
+    private boolean isAnyAnimationActive() {
+        return isAnimating || isShuffling || isSwapping || isFalling || isShaking || isFishActive;
+    }
+
     private void markPowerAffectedCells(GridCell.SpecialPower power, int centerRow, int centerCol, boolean[][] cellsToClear) {
         switch (power) {
             case ROW_CLEAR:    for (int c = 0; c < gridSize; c++) cellsToClear[centerRow][c] = true; break;
