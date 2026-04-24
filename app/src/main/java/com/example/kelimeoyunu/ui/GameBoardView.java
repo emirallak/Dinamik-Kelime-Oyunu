@@ -9,6 +9,7 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
+import android.graphics.Typeface;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
@@ -34,7 +35,9 @@ public class GameBoardView extends View {
 
     private int[][] dropOffsets;
 
-    private Paint cellPaint, textPaint, selectedPaint, powerPaint, linePaint, particlePaint, effectPaint, floatingTextPaint;
+    // ESTETİK BOYALAR
+    private Paint tilePaint, tileShadowPaint, textPaint, selectedTilePaint;
+    private Paint powerBgPaint, powerPaint, linePaint, particlePaint, effectPaint, floatingTextPaint;
     private Paint errorCellPaint;
     private float cellSize;
 
@@ -42,16 +45,14 @@ public class GameBoardView extends View {
     private GameListener gameListener;
     private Random random = new Random();
 
-    // ANİMASYON VE EFEKT DURUMLARI
+    // ANİMASYON DURUMLARI
     private boolean isAnimating = false;
     private float explosionProgress = 0f;
     private List<GridCell> explodingCells = new ArrayList<>();
 
-    // Harf Karıştırma Jokeri Animasyonu
     private boolean isShuffling = false;
     private float shuffleProgress = 0f;
 
-    // Hata Titremesi
     private boolean isErrorShaking = false;
     private float errorShakeProgress = 0f;
 
@@ -62,11 +63,9 @@ public class GameBoardView extends View {
     private float cameraShakeOffsetX = 0f;
     private float cameraShakeOffsetY = 0f;
 
-    // Yerçekimi / Düşme
     private boolean isGravityFalling = false;
     private float gravityProgress = 1f;
 
-    // JOKER MODLARI
     public enum JokerMode { NONE, LOLLIPOP, WHEEL, SWAP_1, SWAP_2 }
     private JokerMode currentJokerMode = JokerMode.NONE;
     private GridCell swapTarget1 = null;
@@ -75,9 +74,10 @@ public class GameBoardView extends View {
     private boolean isSwapping = false;
     private float swapProgress = 1f;
 
+    // Balık Jokeri Animasyonu
     private boolean isFishEating = false;
     private float fishProgress = 0f;
-    private float fishX = -100f, fishY = -100f;
+    private List<GridCell> targetFishCells = new ArrayList<>(); // Yüzülecek hedefler
 
     public interface GameListener {
         void onWordFound(int scoreToAdd, String word);
@@ -92,21 +92,62 @@ public class GameBoardView extends View {
     }
 
     private void init() {
-        cellPaint = new Paint(); cellPaint.setColor(Color.WHITE); cellPaint.setStyle(Paint.Style.FILL);
-        selectedPaint = new Paint(); selectedPaint.setColor(Color.parseColor("#FFCA28")); selectedPaint.setStyle(Paint.Style.FILL);
+        // --- DAHA OYUNUMSU (CANDY) TASARIM BOYALARI ---
 
-        errorCellPaint = new Paint(); errorCellPaint.setColor(Color.parseColor("#FF5252")); errorCellPaint.setStyle(Paint.Style.FILL);
+        tilePaint = new Paint();
+        tilePaint.setColor(Color.parseColor("#FFF3E0"));
+        tilePaint.setStyle(Paint.Style.FILL);
+        tilePaint.setAntiAlias(true);
 
-        textPaint = new Paint(); textPaint.setColor(Color.BLACK); textPaint.setTextSize(60f); textPaint.setTextAlign(Paint.Align.CENTER); textPaint.setAntiAlias(true);
-        powerPaint = new Paint(); powerPaint.setColor(Color.RED); powerPaint.setTextSize(40f); powerPaint.setTextAlign(Paint.Align.RIGHT);
-        linePaint = new Paint(); linePaint.setColor(Color.parseColor("#80FFCA28")); linePaint.setStrokeWidth(15f); linePaint.setStrokeJoin(Paint.Join.ROUND); linePaint.setStyle(Paint.Style.STROKE);
+        tileShadowPaint = new Paint();
+        tileShadowPaint.setColor(Color.parseColor("#D7CCC8"));
+        tileShadowPaint.setStyle(Paint.Style.FILL);
+        tileShadowPaint.setAntiAlias(true);
+
+        selectedTilePaint = new Paint();
+        selectedTilePaint.setColor(Color.parseColor("#FFCA28"));
+        selectedTilePaint.setStyle(Paint.Style.FILL);
+        selectedTilePaint.setAntiAlias(true);
+
+        errorCellPaint = new Paint();
+        errorCellPaint.setColor(Color.parseColor("#EF5350"));
+        errorCellPaint.setStyle(Paint.Style.FILL);
+        errorCellPaint.setAntiAlias(true);
+
+        textPaint = new Paint();
+        textPaint.setColor(Color.parseColor("#1A237E"));
+        textPaint.setTextSize(65f);
+        textPaint.setTextAlign(Paint.Align.CENTER);
+        textPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+        textPaint.setAntiAlias(true);
+
+        powerBgPaint = new Paint();
+        powerBgPaint.setColor(Color.argb(180, 255, 255, 255));
+        powerBgPaint.setStyle(Paint.Style.FILL);
+        powerBgPaint.setAntiAlias(true);
+
+        powerPaint = new Paint();
+        powerPaint.setColor(Color.RED);
+        powerPaint.setTextSize(45f);
+        powerPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+        powerPaint.setTextAlign(Paint.Align.CENTER);
+        powerPaint.setAntiAlias(true);
+
+        linePaint = new Paint();
+        linePaint.setColor(Color.argb(150, 255, 193, 7));
+        linePaint.setStrokeWidth(25f);
+        linePaint.setStrokeJoin(Paint.Join.ROUND);
+        linePaint.setStrokeCap(Paint.Cap.ROUND);
+        linePaint.setStyle(Paint.Style.STROKE);
+        linePaint.setAntiAlias(true);
 
         particlePaint = new Paint(); particlePaint.setStyle(Paint.Style.FILL);
         effectPaint = new Paint(); effectPaint.setStyle(Paint.Style.FILL); effectPaint.setAntiAlias(true);
 
         floatingTextPaint = new Paint(); floatingTextPaint.setColor(Color.parseColor("#4CAF50"));
-        floatingTextPaint.setTextSize(80f); floatingTextPaint.setTextAlign(Paint.Align.CENTER);
-        floatingTextPaint.setFakeBoldText(true); floatingTextPaint.setShadowLayer(5, 2, 2, Color.BLACK);
+        floatingTextPaint.setTextSize(85f); floatingTextPaint.setTextAlign(Paint.Align.CENTER);
+        floatingTextPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+        floatingTextPaint.setShadowLayer(6, 3, 3, Color.BLACK);
     }
 
     public void setupGame(int size, DictionaryManager dict, GameListener listener) {
@@ -139,15 +180,26 @@ public class GameBoardView extends View {
         invalidate();
     }
 
-    // --- ANLIK ÇİZİM VE EFEKTLER (UI) ---
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         if (cells == null) return;
         cellSize = (float) getWidth() / gridSize;
+        float exactGridHeight = gridSize * cellSize; // Gridin gerçek kare yüksekliği
 
         canvas.save();
         canvas.translate(cameraShakeOffsetX, cameraShakeOffsetY);
+
+        if (currentPath.size() > 1 && currentJokerMode == JokerMode.NONE && !isErrorShaking) {
+            for (int i = 0; i < currentPath.size() - 1; i++) {
+                GridCell start = currentPath.get(i), end = currentPath.get(i + 1);
+                if (isErrorShaking) linePaint.setColor(Color.parseColor("#80EF5350"));
+                else linePaint.setColor(Color.parseColor("#80FFCA28"));
+
+                canvas.drawLine(start.col * cellSize + (cellSize / 2), start.row * cellSize + (cellSize / 2),
+                        end.col * cellSize + (cellSize / 2), end.row * cellSize + (cellSize / 2), linePaint);
+            }
+        }
 
         for (int r = 0; r < gridSize; r++) {
             for (int c = 0; c < gridSize; c++) {
@@ -206,41 +258,74 @@ public class GameBoardView extends View {
                 float inset = (cellSize - currentCellSize) / 2;
                 left += inset; top += inset;
 
-                cellPaint.setAlpha(currentAlpha); textPaint.setAlpha(currentAlpha); powerPaint.setAlpha(currentAlpha);
+                tilePaint.setAlpha(currentAlpha); textPaint.setAlpha(currentAlpha); powerPaint.setAlpha(currentAlpha); tileShadowPaint.setAlpha(currentAlpha);
 
-                Paint bgPaint = cellPaint;
-                if (isErrorShaking && currentPath.contains(cell)) bgPaint = errorCellPaint;
-                else if (cell.isSelected || cell == swapTarget1) bgPaint = selectedPaint;
-                else if (currentJokerMode == JokerMode.LOLLIPOP) cellPaint.setColor(Color.parseColor("#FFF3E0"));
-                else if (currentJokerMode == JokerMode.WHEEL) cellPaint.setColor(Color.parseColor("#FCE4EC")); // Hafif pembe hedef rengi
-                else if (currentJokerMode == JokerMode.SWAP_1 || currentJokerMode == JokerMode.SWAP_2) cellPaint.setColor(Color.parseColor("#E3F2FD"));
-                else cellPaint.setColor(Color.WHITE);
+                Paint bgPaint = tilePaint;
+                Paint shadowPaint = tileShadowPaint;
 
-                canvas.drawRoundRect(new RectF(left + 2, top + 2, left + currentCellSize - 2, top + currentCellSize - 2), 15, 15, bgPaint);
+                if (isErrorShaking && currentPath.contains(cell)) {
+                    bgPaint = errorCellPaint;
+                } else if (cell.isSelected || cell == swapTarget1) {
+                    bgPaint = selectedTilePaint;
+                } else if (currentJokerMode == JokerMode.LOLLIPOP) {
+                    bgPaint = new Paint(tilePaint); bgPaint.setColor(Color.parseColor("#FFE0B2"));
+                } else if (currentJokerMode == JokerMode.WHEEL) {
+                    bgPaint = new Paint(tilePaint); bgPaint.setColor(Color.parseColor("#FCE4EC"));
+                } else if (currentJokerMode == JokerMode.SWAP_1 || currentJokerMode == JokerMode.SWAP_2) {
+                    bgPaint = new Paint(tilePaint); bgPaint.setColor(Color.parseColor("#E3F2FD"));
+                }
+
+                float tilePadding = 8f;
+                float roundCorner = 25f;
+                RectF shadowRect = new RectF(left + tilePadding, top + tilePadding + 8, left + currentCellSize - tilePadding, top + currentCellSize - tilePadding + 8);
+                canvas.drawRoundRect(shadowRect, roundCorner, roundCorner, shadowPaint);
+
+                RectF tileRect = new RectF(left + tilePadding, top + tilePadding, left + currentCellSize - tilePadding, top + currentCellSize - tilePadding);
+                canvas.drawRoundRect(tileRect, roundCorner, roundCorner, bgPaint);
 
                 if (bgPaint == errorCellPaint) textPaint.setColor(Color.WHITE);
-                else textPaint.setColor(Color.BLACK);
+                else textPaint.setColor(Color.parseColor("#1A237E"));
 
                 float textY = top + (currentCellSize / 2) - ((textPaint.descent() + textPaint.ascent()) / 2);
                 canvas.drawText(String.valueOf(cell.letter), left + (currentCellSize / 2), textY, textPaint);
 
+                // Özel güç sembolleri sadece kendi simgeleriyle gösteriliyor
                 if (cell.power != GridCell.SpecialPower.NONE) {
-                    canvas.drawText(getPowerSymbol(cell.power), left + currentCellSize - 10, top + 40 * (currentCellSize/cellSize), powerPaint);
+                    float px = left + currentCellSize - 35;
+                    float py = top + 40;
+                    canvas.drawCircle(px, py - 12, 22, powerBgPaint);
+                    canvas.drawText(getPowerSymbol(cell.power), px, py, powerPaint);
                 }
 
-                cellPaint.setAlpha(255); textPaint.setAlpha(255); powerPaint.setAlpha(255);
+                tilePaint.setAlpha(255); textPaint.setAlpha(255); powerPaint.setAlpha(255); tileShadowPaint.setAlpha(255);
             }
         }
 
-        if (currentPath.size() > 1 && currentJokerMode == JokerMode.NONE && !isErrorShaking) {
-            for (int i = 0; i < currentPath.size() - 1; i++) {
-                GridCell start = currentPath.get(i), end = currentPath.get(i + 1);
-                if (isErrorShaking) linePaint.setColor(Color.parseColor("#80FF5252"));
-                else linePaint.setColor(Color.parseColor("#80FFCA28"));
+        // --- GRID SINIRLARI İÇİNDE KALMASI GEREKEN EFEKTLER ---
+        canvas.save();
 
-                canvas.drawLine(start.col * cellSize + (cellSize / 2), start.row * cellSize + (cellSize / 2),
-                        end.col * cellSize + (cellSize / 2), end.row * cellSize + (cellSize / 2), linePaint);
+        // Lazerlerin sadece Grid boyutunda (Kare) kalması için sınırlandırma
+        canvas.clipRect(0, 0, getWidth(), exactGridHeight);
+
+        Iterator<Effect> eIter = activeEffects.iterator();
+        while (eIter.hasNext()) {
+            Effect e = eIter.next();
+            e.update();
+            effectPaint.setColor(e.color);
+            effectPaint.setAlpha((int)(255 * e.life));
+            if (e.type == EffectType.LASER_H) {
+                // Sadece grid genişliği kadar çiz
+                canvas.drawRect(0, e.y - 15, getWidth(), e.y + 15, effectPaint);
+            } else if (e.type == EffectType.LASER_V) {
+                // Sadece grid yüksekliği kadar çiz
+                canvas.drawRect(e.x - 15, 0, e.x + 15, exactGridHeight, effectPaint);
+            } else if (e.type == EffectType.SHOCKWAVE) {
+                effectPaint.setStyle(Paint.Style.STROKE);
+                effectPaint.setStrokeWidth(15f);
+                canvas.drawCircle(e.x, e.y, e.radius, effectPaint);
+                effectPaint.setStyle(Paint.Style.FILL);
             }
+            if (e.life <= 0) eIter.remove();
         }
 
         Iterator<Particle> pIter = particles.iterator();
@@ -253,29 +338,43 @@ public class GameBoardView extends View {
             if (p.life <= 0) pIter.remove();
         }
 
-        Iterator<Effect> eIter = activeEffects.iterator();
-        while (eIter.hasNext()) {
-            Effect e = eIter.next();
-            e.update();
-            effectPaint.setColor(e.color);
-            effectPaint.setAlpha((int)(255 * e.life));
-            if (e.type == EffectType.LASER_H) {
-                canvas.drawRect(0, e.y - 10, getWidth(), e.y + 10, effectPaint);
-            } else if (e.type == EffectType.LASER_V) {
-                canvas.drawRect(e.x - 10, 0, e.x + 10, getHeight(), effectPaint);
-            } else if (e.type == EffectType.SHOCKWAVE) {
-                effectPaint.setStyle(Paint.Style.STROKE);
-                effectPaint.setStrokeWidth(10f);
-                canvas.drawCircle(e.x, e.y, e.radius, effectPaint);
-                effectPaint.setStyle(Paint.Style.FILL);
+        // --- ÇOKLU BALIK ÇİZİMİ (Yok edilen harf sayısı kadar) ---
+        if (isFishEating) {
+            Paint fishPnt = new Paint();
+            fishPnt.setColor(Color.parseColor("#FF5722"));
+            fishPnt.setAntiAlias(true);
+            Paint eyePaint = new Paint(); eyePaint.setColor(Color.WHITE);
+
+            for (int i = 0; i < targetFishCells.size(); i++) {
+                GridCell cell = targetFishCells.get(i);
+
+                // Balıklar soldan sağa yüzer
+                float fX = -100f + (getWidth() + 200f) * fishProgress;
+
+                // Balıkların aynı anda değil hafif aralıklarla gelmesi için X ekseninde ufak kaydırma
+                fX -= i * 60f;
+
+                // Her balık yiyeceği harfin Y ekseni (satır) hizasında yüzer
+                float targetY = (cell.row * cellSize) + (cellSize / 2f);
+                float fY = targetY + (float)Math.sin(fishProgress * Math.PI * 8 + i) * 15f; // Suda yüzme dalgası
+
+                // Balık Gövdesi
+                canvas.drawOval(new RectF(fX - 30, fY - 20, fX + 30, fY + 20), fishPnt);
+
+                // Balık Kuyruğu
+                Path tailPath = new Path();
+                tailPath.moveTo(fX - 25, fY);
+                tailPath.lineTo(fX - 60, fY - 25);
+                tailPath.lineTo(fX - 60, fY + 25);
+                tailPath.close();
+                canvas.drawPath(tailPath, fishPnt);
+
+                // Balık Gözü
+                canvas.drawCircle(fX + 15, fY - 5, 5, eyePaint);
             }
-            if (e.life <= 0) eIter.remove();
         }
 
-        if (isFishEating) {
-            Paint fishPaint = new Paint(); fishPaint.setColor(Color.parseColor("#FF9800"));
-            canvas.drawCircle(fishX, fishY, 40, fishPaint);
-        }
+        canvas.restore(); // Clip Rect'i Kapat
 
         Iterator<FloatingText> tIter = floatingTexts.iterator();
         while (tIter.hasNext()) {
@@ -286,15 +385,22 @@ public class GameBoardView extends View {
             if (ft.life <= 0) tIter.remove();
         }
 
-        canvas.restore();
+        canvas.restore(); // Genel Transformu Kapat
 
-        if (!particles.isEmpty() || !floatingTexts.isEmpty() || !activeEffects.isEmpty() || isShuffling) {
+        if (!particles.isEmpty() || !floatingTexts.isEmpty() || !activeEffects.isEmpty() || isShuffling || isFishEating) {
             invalidate();
         }
     }
 
     private String getPowerSymbol(GridCell.SpecialPower power) {
-        switch (power) { case ROW_CLEAR: return "⇆"; case AREA_EXPLODE: return "✹"; case COLUMN_CLEAR: return "⇅"; case MEGA_EXPLODE: return "✪"; default: return ""; }
+        // Temsili A harfi kaldırıldı, sadece dökümandaki özel semboller
+        switch (power) {
+            case ROW_CLEAR: return "⇆";
+            case AREA_EXPLODE: return "✹";
+            case COLUMN_CLEAR: return "⇅";
+            case MEGA_EXPLODE: return "✪";
+            default: return "";
+        }
     }
 
     @Override
@@ -350,7 +456,6 @@ public class GameBoardView extends View {
         } else if (currentJokerMode == JokerMode.WHEEL) {
             currentJokerMode = JokerMode.NONE;
 
-            // Tabloya göre satır ve sütundaki tüm harfler yok edilecek
             List<GridCell> exp = new ArrayList<>();
             for(int i = 0; i < gridSize; i++) {
                 if(!exp.contains(cells[cell.row][i])) exp.add(cells[cell.row][i]);
@@ -360,7 +465,6 @@ public class GameBoardView extends View {
             float cx = cell.col * cellSize + cellSize/2;
             float cy = cell.row * cellSize + cellSize/2;
 
-            // Pembe renkli çarpı (lazer) animasyonu
             activeEffects.add(new Effect(EffectType.LASER_H, cx, cy, Color.parseColor("#E91E63")));
             activeEffects.add(new Effect(EffectType.LASER_V, cx, cy, Color.parseColor("#E91E63")));
             spawnParticles(cx, cy, 30);
@@ -387,9 +491,6 @@ public class GameBoardView extends View {
         }
     }
 
-    // --- JOKER VE ANİMASYON METOTLARI ---
-
-    // HARF KARIŞTIRMA JOKERİ
     public void shuffleBoard() {
         if (cells == null || isShuffling) return;
         isShuffling = true;
@@ -436,6 +537,8 @@ public class GameBoardView extends View {
         if (isAnimating) return;
         List<GridCell> exp = new ArrayList<>();
         int count = 0;
+
+        // Tabloya göre 5 tane siliyorsak, 5 balık hedefi ekliyoruz.
         while (count < 5) {
             int r = random.nextInt(gridSize); int c = random.nextInt(gridSize);
             if (!exp.contains(cells[r][c])) { exp.add(cells[r][c]); count++; }
@@ -443,7 +546,6 @@ public class GameBoardView extends View {
         startFishAnimation(exp);
     }
 
-    // PARTİ GÜÇLENDİRİCİSİ (Tabloya göre tüm haritayı sıfırlar)
     public void usePartyBooster() {
         if (cells == null || isAnimating) return;
 
@@ -456,7 +558,6 @@ public class GameBoardView extends View {
             }
         }
 
-        // Bolca kutlama efekti
         for (int i = 0; i < 8; i++) {
             spawnParticles(random.nextInt(getWidth()), random.nextInt(getHeight()), 20);
         }
@@ -591,7 +692,6 @@ public class GameBoardView extends View {
 
         ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
         animator.setDuration(500);
-
         animator.setInterpolator(new BounceInterpolator());
 
         animator.addUpdateListener(animation -> {
@@ -610,12 +710,13 @@ public class GameBoardView extends View {
 
     private void startFishAnimation(List<GridCell> exp) {
         isFishEating = true;
+        targetFishCells.clear();
+        targetFishCells.addAll(exp); // Hedefleri listeye ekle
+
         ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
         animator.setDuration(1500);
         animator.addUpdateListener(animation -> {
             fishProgress = (float) animation.getAnimatedValue();
-            fishX = getWidth() * fishProgress;
-            fishY = getHeight() / 2f + (float)Math.sin(fishProgress * Math.PI * 4) * 100f;
             invalidate();
         });
         animator.addListener(new AnimatorListenerAdapter() {
