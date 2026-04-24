@@ -7,9 +7,12 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.RectF;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.animation.BounceInterpolator;
 
 import com.example.kelimeoyunu.models.GridCell;
 import com.example.kelimeoyunu.utils.DictionaryManager;
@@ -19,6 +22,7 @@ import com.example.kelimeoyunu.utils.ScoreCalculator;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
 
@@ -28,30 +32,52 @@ public class GameBoardView extends View {
     private GridCell[][] cells;
     private List<GridCell> currentPath = new ArrayList<>();
 
-    private Paint cellPaint, textPaint, selectedPaint, powerPaint, linePaint;
+    private int[][] dropOffsets;
+
+    private Paint cellPaint, textPaint, selectedPaint, powerPaint, linePaint, particlePaint, effectPaint, floatingTextPaint;
+    private Paint errorCellPaint;
     private float cellSize;
 
     private DictionaryManager dictionaryManager;
     private GameListener gameListener;
     private Random random = new Random();
 
-    // ANİMASYON DURUMLARI
+    // ANİMASYON VE EFEKT DURUMLARI
     private boolean isAnimating = false;
     private float explosionProgress = 0f;
     private List<GridCell> explodingCells = new ArrayList<>();
 
+    // Harf Karıştırma Jokeri Animasyonu
     private boolean isShuffling = false;
-    private float shuffleProgress = 1f;
+    private float shuffleProgress = 0f;
 
-    // YENİ JOKER MODLARI
+    // Hata Titremesi
+    private boolean isErrorShaking = false;
+    private float errorShakeProgress = 0f;
+
+    // Özel Efektler
+    private List<Particle> particles = new ArrayList<>();
+    private List<FloatingText> floatingTexts = new ArrayList<>();
+    private List<Effect> activeEffects = new ArrayList<>();
+    private float cameraShakeOffsetX = 0f;
+    private float cameraShakeOffsetY = 0f;
+
+    // Yerçekimi / Düşme
+    private boolean isGravityFalling = false;
+    private float gravityProgress = 1f;
+
+    // JOKER MODLARI
     public enum JokerMode { NONE, LOLLIPOP, WHEEL, SWAP_1, SWAP_2 }
     private JokerMode currentJokerMode = JokerMode.NONE;
     private GridCell swapTarget1 = null;
+    private GridCell swapTarget2 = null;
 
-    // SWAP (Takas) Animasyonu
     private boolean isSwapping = false;
     private float swapProgress = 1f;
-    private GridCell swapTarget2 = null;
+
+    private boolean isFishEating = false;
+    private float fishProgress = 0f;
+    private float fishX = -100f, fishY = -100f;
 
     public interface GameListener {
         void onWordFound(int scoreToAdd, String word);
@@ -68,9 +94,19 @@ public class GameBoardView extends View {
     private void init() {
         cellPaint = new Paint(); cellPaint.setColor(Color.WHITE); cellPaint.setStyle(Paint.Style.FILL);
         selectedPaint = new Paint(); selectedPaint.setColor(Color.parseColor("#FFCA28")); selectedPaint.setStyle(Paint.Style.FILL);
+
+        errorCellPaint = new Paint(); errorCellPaint.setColor(Color.parseColor("#FF5252")); errorCellPaint.setStyle(Paint.Style.FILL);
+
         textPaint = new Paint(); textPaint.setColor(Color.BLACK); textPaint.setTextSize(60f); textPaint.setTextAlign(Paint.Align.CENTER); textPaint.setAntiAlias(true);
         powerPaint = new Paint(); powerPaint.setColor(Color.RED); powerPaint.setTextSize(40f); powerPaint.setTextAlign(Paint.Align.RIGHT);
         linePaint = new Paint(); linePaint.setColor(Color.parseColor("#80FFCA28")); linePaint.setStrokeWidth(15f); linePaint.setStrokeJoin(Paint.Join.ROUND); linePaint.setStyle(Paint.Style.STROKE);
+
+        particlePaint = new Paint(); particlePaint.setStyle(Paint.Style.FILL);
+        effectPaint = new Paint(); effectPaint.setStyle(Paint.Style.FILL); effectPaint.setAntiAlias(true);
+
+        floatingTextPaint = new Paint(); floatingTextPaint.setColor(Color.parseColor("#4CAF50"));
+        floatingTextPaint.setTextSize(80f); floatingTextPaint.setTextAlign(Paint.Align.CENTER);
+        floatingTextPaint.setFakeBoldText(true); floatingTextPaint.setShadowLayer(5, 2, 2, Color.BLACK);
     }
 
     public void setupGame(int size, DictionaryManager dict, GameListener listener) {
@@ -78,6 +114,7 @@ public class GameBoardView extends View {
         this.dictionaryManager = dict;
         this.gameListener = listener;
         this.cells = new GridCell[size][size];
+        this.dropOffsets = new int[size][size];
 
         boolean isGridPlayable = false;
         int wordCount = 0;
@@ -89,19 +126,9 @@ public class GameBoardView extends View {
                 }
             }
 
-            // Test için banko 7 harfli kelime
-            String testWord = "DENEMEK";
-            int middleRow = size / 2;
-            int startCol = (size - 7) / 2;
-            if (size >= 7) {
-                for (int i = 0; i < 7; i++) cells[middleRow][startCol + i].letter = testWord.charAt(i);
-            }
-
             for (int r = 0; r < size; r++) {
                 for (int c = 0; c < size; c++) {
-                    if (cells[r][c].letter == ' ') {
-                        cells[r][c].letter = LetterGenerator.getRandomLetter();
-                    }
+                    if (cells[r][c].letter == ' ') cells[r][c].letter = LetterGenerator.getRandomLetter();
                 }
             }
 
@@ -119,6 +146,9 @@ public class GameBoardView extends View {
         if (cells == null) return;
         cellSize = (float) getWidth() / gridSize;
 
+        canvas.save();
+        canvas.translate(cameraShakeOffsetX, cameraShakeOffsetY);
+
         for (int r = 0; r < gridSize; r++) {
             for (int c = 0; c < gridSize; c++) {
                 GridCell cell = cells[r][c];
@@ -131,38 +161,66 @@ public class GameBoardView extends View {
                 float left = c * cellSize;
                 float top = r * cellSize;
 
-                if (isExploding) {
+                float shakeOffsetX = 0;
+                if (isErrorShaking && currentPath.contains(cell)) {
+                    shakeOffsetX = (float) Math.sin(errorShakeProgress * Math.PI * 6) * 15f;
+                    left += shakeOffsetX;
+                }
+
+                if (isCellSwapping) {
+                    float cx1 = swapTarget1.col * cellSize;
+                    float cy1 = swapTarget1.row * cellSize;
+                    float cx2 = swapTarget2.col * cellSize;
+                    float cy2 = swapTarget2.row * cellSize;
+
+                    float midX = (cx1 + cx2) / 2f;
+                    float midY = (cy1 + cy2) / 2f;
+                    float radius = (float) Math.hypot(cx1 - cx2, cy1 - cy2) / 2f;
+
+                    float angleOffset = (float) Math.PI * swapProgress;
+                    if (cell == swapTarget1) {
+                        left = midX + radius * (float)Math.cos(angleOffset) - cellSize/2f + cellSize/2f;
+                        top = midY + radius * (float)Math.sin(angleOffset) - cellSize/2f + cellSize/2f;
+                    } else {
+                        left = midX + radius * (float)Math.cos(angleOffset + Math.PI) - cellSize/2f + cellSize/2f;
+                        top = midY + radius * (float)Math.sin(angleOffset + Math.PI) - cellSize/2f + cellSize/2f;
+                    }
+                }
+                else if (isGravityFalling && dropOffsets[r][c] > 0) {
+                    float targetTop = r * cellSize;
+                    float startTop = targetTop - (dropOffsets[r][c] * cellSize);
+                    top = startTop + (targetTop - startTop) * gravityProgress;
+                }
+                else if (isExploding) {
                     currentCellSize = cellSize * (1f - explosionProgress);
                     currentAlpha = (int) (255 * (1f - explosionProgress));
-                } else if (isShuffling) {
-                    currentCellSize = cellSize * shuffleProgress;
-                    currentAlpha = (int) (255 * shuffleProgress);
-                } else if (isCellSwapping) {
-                    currentCellSize = cellSize * swapProgress;
+                }
+                else if (isShuffling) {
+                    float scale = shuffleProgress < 0.5f
+                            ? 1f - (shuffleProgress * 2f)
+                            : (shuffleProgress - 0.5f) * 2f;
+                    currentCellSize = cellSize * scale;
+                    currentAlpha = (int) (255 * scale);
                 }
 
-                left += (cellSize - currentCellSize) / 2;
-                top += (cellSize - currentCellSize) / 2;
+                float inset = (cellSize - currentCellSize) / 2;
+                left += inset; top += inset;
 
-                cellPaint.setAlpha(currentAlpha);
-                textPaint.setAlpha(currentAlpha);
-                powerPaint.setAlpha(currentAlpha);
+                cellPaint.setAlpha(currentAlpha); textPaint.setAlpha(currentAlpha); powerPaint.setAlpha(currentAlpha);
 
-                // Joker Moduna Göre Arkaplan Rengi (Görsel Geri Bildirim)
                 Paint bgPaint = cellPaint;
-                if (cell.isSelected || cell == swapTarget1) {
-                    bgPaint = selectedPaint;
-                } else if (currentJokerMode == JokerMode.LOLLIPOP) {
-                    cellPaint.setColor(Color.parseColor("#FFF3E0")); // Turuncu
-                } else if (currentJokerMode == JokerMode.WHEEL) {
-                    cellPaint.setColor(Color.parseColor("#F3E5F5")); // Mor
-                } else if (currentJokerMode == JokerMode.SWAP_1 || currentJokerMode == JokerMode.SWAP_2) {
-                    cellPaint.setColor(Color.parseColor("#E3F2FD")); // Mavi
-                } else {
-                    cellPaint.setColor(Color.WHITE);
-                }
+                if (isErrorShaking && currentPath.contains(cell)) bgPaint = errorCellPaint;
+                else if (cell.isSelected || cell == swapTarget1) bgPaint = selectedPaint;
+                else if (currentJokerMode == JokerMode.LOLLIPOP) cellPaint.setColor(Color.parseColor("#FFF3E0"));
+                else if (currentJokerMode == JokerMode.WHEEL) cellPaint.setColor(Color.parseColor("#FCE4EC")); // Hafif pembe hedef rengi
+                else if (currentJokerMode == JokerMode.SWAP_1 || currentJokerMode == JokerMode.SWAP_2) cellPaint.setColor(Color.parseColor("#E3F2FD"));
+                else cellPaint.setColor(Color.WHITE);
 
-                canvas.drawRect(left + 2, top + 2, left + currentCellSize - 2, top + currentCellSize - 2, bgPaint);
+                canvas.drawRoundRect(new RectF(left + 2, top + 2, left + currentCellSize - 2, top + currentCellSize - 2), 15, 15, bgPaint);
+
+                if (bgPaint == errorCellPaint) textPaint.setColor(Color.WHITE);
+                else textPaint.setColor(Color.BLACK);
+
                 float textY = top + (currentCellSize / 2) - ((textPaint.descent() + textPaint.ascent()) / 2);
                 canvas.drawText(String.valueOf(cell.letter), left + (currentCellSize / 2), textY, textPaint);
 
@@ -170,18 +228,68 @@ public class GameBoardView extends View {
                     canvas.drawText(getPowerSymbol(cell.power), left + currentCellSize - 10, top + 40 * (currentCellSize/cellSize), powerPaint);
                 }
 
-                cellPaint.setAlpha(255);
-                textPaint.setAlpha(255);
-                powerPaint.setAlpha(255);
+                cellPaint.setAlpha(255); textPaint.setAlpha(255); powerPaint.setAlpha(255);
             }
         }
 
-        if (currentPath.size() > 1 && currentJokerMode == JokerMode.NONE) {
+        if (currentPath.size() > 1 && currentJokerMode == JokerMode.NONE && !isErrorShaking) {
             for (int i = 0; i < currentPath.size() - 1; i++) {
                 GridCell start = currentPath.get(i), end = currentPath.get(i + 1);
+                if (isErrorShaking) linePaint.setColor(Color.parseColor("#80FF5252"));
+                else linePaint.setColor(Color.parseColor("#80FFCA28"));
+
                 canvas.drawLine(start.col * cellSize + (cellSize / 2), start.row * cellSize + (cellSize / 2),
                         end.col * cellSize + (cellSize / 2), end.row * cellSize + (cellSize / 2), linePaint);
             }
+        }
+
+        Iterator<Particle> pIter = particles.iterator();
+        while (pIter.hasNext()) {
+            Particle p = pIter.next();
+            p.update();
+            particlePaint.setColor(p.color);
+            particlePaint.setAlpha((int)(255 * p.life));
+            canvas.drawCircle(p.x, p.y, p.radius, particlePaint);
+            if (p.life <= 0) pIter.remove();
+        }
+
+        Iterator<Effect> eIter = activeEffects.iterator();
+        while (eIter.hasNext()) {
+            Effect e = eIter.next();
+            e.update();
+            effectPaint.setColor(e.color);
+            effectPaint.setAlpha((int)(255 * e.life));
+            if (e.type == EffectType.LASER_H) {
+                canvas.drawRect(0, e.y - 10, getWidth(), e.y + 10, effectPaint);
+            } else if (e.type == EffectType.LASER_V) {
+                canvas.drawRect(e.x - 10, 0, e.x + 10, getHeight(), effectPaint);
+            } else if (e.type == EffectType.SHOCKWAVE) {
+                effectPaint.setStyle(Paint.Style.STROKE);
+                effectPaint.setStrokeWidth(10f);
+                canvas.drawCircle(e.x, e.y, e.radius, effectPaint);
+                effectPaint.setStyle(Paint.Style.FILL);
+            }
+            if (e.life <= 0) eIter.remove();
+        }
+
+        if (isFishEating) {
+            Paint fishPaint = new Paint(); fishPaint.setColor(Color.parseColor("#FF9800"));
+            canvas.drawCircle(fishX, fishY, 40, fishPaint);
+        }
+
+        Iterator<FloatingText> tIter = floatingTexts.iterator();
+        while (tIter.hasNext()) {
+            FloatingText ft = tIter.next();
+            ft.update();
+            floatingTextPaint.setAlpha((int)(255 * ft.life));
+            canvas.drawText(ft.text, ft.x, ft.y, floatingTextPaint);
+            if (ft.life <= 0) tIter.remove();
+        }
+
+        canvas.restore();
+
+        if (!particles.isEmpty() || !floatingTexts.isEmpty() || !activeEffects.isEmpty() || isShuffling) {
+            invalidate();
         }
     }
 
@@ -189,10 +297,9 @@ public class GameBoardView extends View {
         switch (power) { case ROW_CLEAR: return "⇆"; case AREA_EXPLODE: return "✹"; case COLUMN_CLEAR: return "⇅"; case MEGA_EXPLODE: return "✪"; default: return ""; }
     }
 
-    // --- DOKUNMATİK EKRAN VE JOKER HEDEFLERİ ---
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        if (cells == null || isAnimating || isShuffling || isSwapping) return false;
+        if (cells == null || isAnimating || isShuffling || isSwapping || isGravityFalling || isErrorShaking) return false;
 
         float x = event.getX(), y = event.getY();
         int col = (int) (x / cellSize), row = (int) (y / cellSize);
@@ -200,15 +307,11 @@ public class GameBoardView extends View {
 
         GridCell touchedCell = cells[row][col];
 
-        // EĞER BİR JOKER MODU AKTİFSE NORMAL KELİME SEÇİMİNİ İPTAL ET
         if (currentJokerMode != JokerMode.NONE) {
-            if (event.getAction() == MotionEvent.ACTION_DOWN) {
-                handleJokerTouch(touchedCell);
-            }
+            if (event.getAction() == MotionEvent.ACTION_DOWN) handleJokerTouch(touchedCell);
             return true;
         }
 
-        // Normal Oyun Akışı
         float cellCenterX = (col * cellSize) + (cellSize / 2);
         float cellCenterY = (row * cellSize) + (cellSize / 2);
         float distanceToCenter = (float) Math.hypot(x - cellCenterX, y - cellCenterY);
@@ -230,8 +333,6 @@ public class GameBoardView extends View {
         return true;
     }
 
-    // --- JOKER YÖNETİMİ ---
-
     public void enableJokerMode(JokerMode mode) {
         this.currentJokerMode = mode;
         this.swapTarget1 = null;
@@ -241,103 +342,130 @@ public class GameBoardView extends View {
     private void handleJokerTouch(GridCell cell) {
         if (currentJokerMode == JokerMode.LOLLIPOP) {
             currentJokerMode = JokerMode.NONE;
-            List<GridCell> exp = new ArrayList<>();
-            exp.add(cell);
+            List<GridCell> exp = new ArrayList<>(); exp.add(cell);
+            spawnParticles(cell.col * cellSize + cellSize/2, cell.row * cellSize + cellSize/2, 20);
             startExplosionAnimation(exp);
             if (gameListener != null) gameListener.onJokerUsed("Lolipop Kırıcı");
 
         } else if (currentJokerMode == JokerMode.WHEEL) {
             currentJokerMode = JokerMode.NONE;
+
+            // Tabloya göre satır ve sütundaki tüm harfler yok edilecek
             List<GridCell> exp = new ArrayList<>();
-            for (int i = 0; i < gridSize; i++) {
-                exp.add(cells[cell.row][i]); // Satır
-                if (i != cell.col) exp.add(cells[i][cell.col]); // Sütun
+            for(int i = 0; i < gridSize; i++) {
+                if(!exp.contains(cells[cell.row][i])) exp.add(cells[cell.row][i]);
+                if(!exp.contains(cells[i][cell.col])) exp.add(cells[i][cell.col]);
             }
+
+            float cx = cell.col * cellSize + cellSize/2;
+            float cy = cell.row * cellSize + cellSize/2;
+
+            // Pembe renkli çarpı (lazer) animasyonu
+            activeEffects.add(new Effect(EffectType.LASER_H, cx, cy, Color.parseColor("#E91E63")));
+            activeEffects.add(new Effect(EffectType.LASER_V, cx, cy, Color.parseColor("#E91E63")));
+            spawnParticles(cx, cy, 30);
+            startCameraShake(15f);
+
             startExplosionAnimation(exp);
             if (gameListener != null) gameListener.onJokerUsed("Tekerlek");
 
         } else if (currentJokerMode == JokerMode.SWAP_1) {
             swapTarget1 = cell;
             currentJokerMode = JokerMode.SWAP_2;
-            invalidate(); // 1. harfi vurgula
+            invalidate();
 
         } else if (currentJokerMode == JokerMode.SWAP_2) {
             if (cell == swapTarget1) {
-                currentJokerMode = JokerMode.NONE; // İptal et
-                swapTarget1 = null;
-                invalidate();
+                currentJokerMode = JokerMode.NONE; swapTarget1 = null; invalidate();
             } else if (Math.abs(cell.row - swapTarget1.row) <= 1 && Math.abs(cell.col - swapTarget1.col) <= 1) {
                 currentJokerMode = JokerMode.NONE;
-                startSwapAnimation(swapTarget1, cell); // Takas animasyonunu başlat
+                startSwapAnimation(swapTarget1, cell);
                 if (gameListener != null) gameListener.onJokerUsed("Serbest Değiştirme");
             } else {
-                swapTarget1 = cell; // Yeni ilk hedef yap
-                invalidate();
+                swapTarget1 = cell; invalidate();
             }
         }
     }
 
-    // 🐟 Balık Jokeri (5 Rastgele)
-    public void useFishJoker() {
-        if (isAnimating) return;
-        List<GridCell> exp = new ArrayList<>();
-        int count = 0;
-        while (count < 5) { // 5 harf patlatır
-            int r = random.nextInt(gridSize);
-            int c = random.nextInt(gridSize);
-            if (!exp.contains(cells[r][c])) {
-                exp.add(cells[r][c]);
-                count++;
-            }
-        }
-        startExplosionAnimation(exp);
-    }
+    // --- JOKER VE ANİMASYON METOTLARI ---
 
-    // 🎉 Parti Güçlendirici (Tüm Tahta)
-    public void usePartyBooster() {
-        if (isAnimating) return;
-        List<GridCell> exp = new ArrayList<>();
-        for (int r = 0; r < gridSize; r++) {
-            for (int c = 0; c < gridSize; c++) {
-                exp.add(cells[r][c]);
-            }
-        }
-        startExplosionAnimation(exp);
-    }
+    // HARF KARIŞTIRMA JOKERİ
+    public void shuffleBoard() {
+        if (cells == null || isShuffling) return;
+        isShuffling = true;
+        final boolean[] isDataShuffled = {false};
 
-    // 🔄 Takas Animasyonu
-    private void startSwapAnimation(GridCell cell1, GridCell cell2) {
-        isSwapping = true;
-        swapTarget1 = cell1;
-        swapTarget2 = cell2;
-
-        ValueAnimator animator = ValueAnimator.ofFloat(1f, 0f, 1f);
-        animator.setDuration(400);
-        final boolean[] swapped = {false};
-
+        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+        animator.setDuration(600);
         animator.addUpdateListener(animation -> {
-            swapProgress = (float) animation.getAnimatedValue();
-            if (swapProgress < 0.1f && animation.getCurrentPlayTime() > 150 && !swapped[0]) {
-                // Harfler küçücükken verileri takas et
-                char tempL = cell1.letter; GridCell.SpecialPower tempP = cell1.power;
-                cell1.letter = cell2.letter; cell1.power = cell2.power;
-                cell2.letter = tempL; cell2.power = tempP;
-                swapped[0] = true;
+            shuffleProgress = (float) animation.getAnimatedValue();
+
+            if (shuffleProgress >= 0.5f && !isDataShuffled[0]) {
+                isDataShuffled[0] = true;
+                List<Character> letters = new ArrayList<>();
+                List<GridCell.SpecialPower> powers = new ArrayList<>();
+                for (int r = 0; r < gridSize; r++) {
+                    for (int c = 0; c < gridSize; c++) {
+                        letters.add(cells[r][c].letter); powers.add(cells[r][c].power);
+                    }
+                }
+                Collections.shuffle(letters, random); Collections.shuffle(powers, random);
+                int index = 0;
+                for (int r = 0; r < gridSize; r++) {
+                    for (int c = 0; c < gridSize; c++) {
+                        cells[r][c].letter = letters.get(index);
+                        cells[r][c].power = powers.get(index); index++;
+                    }
+                }
+                clearSelection();
             }
             invalidate();
         });
         animator.addListener(new AnimatorListenerAdapter() {
             @Override
             public void onAnimationEnd(Animator animation) {
-                isSwapping = false;
-                swapTarget1 = null; swapTarget2 = null;
+                isShuffling = false;
+                shuffleProgress = 0f;
                 if (gameListener != null) gameListener.onGridAnalyzed(calculateAvailableWords());
             }
         });
         animator.start();
     }
 
-    // --- ESKİ MANTIK VE ANİMASYONLAR (Değişmedi) ---
+    public void useFishJoker() {
+        if (isAnimating) return;
+        List<GridCell> exp = new ArrayList<>();
+        int count = 0;
+        while (count < 5) {
+            int r = random.nextInt(gridSize); int c = random.nextInt(gridSize);
+            if (!exp.contains(cells[r][c])) { exp.add(cells[r][c]); count++; }
+        }
+        startFishAnimation(exp);
+    }
+
+    // PARTİ GÜÇLENDİRİCİSİ (Tabloya göre tüm haritayı sıfırlar)
+    public void usePartyBooster() {
+        if (cells == null || isAnimating) return;
+
+        List<GridCell> exp = new ArrayList<>();
+        for (int r = 0; r < gridSize; r++) {
+            for (int c = 0; c < gridSize; c++) {
+                if (cells[r][c].letter != ' ') {
+                    exp.add(cells[r][c]);
+                }
+            }
+        }
+
+        // Bolca kutlama efekti
+        for (int i = 0; i < 8; i++) {
+            spawnParticles(random.nextInt(getWidth()), random.nextInt(getHeight()), 20);
+        }
+        startCameraShake(25f);
+
+        startExplosionAnimation(exp);
+
+        if (gameListener != null) gameListener.onJokerUsed("Parti Güçlendiricisi");
+    }
 
     private void continueSelection(GridCell cell) {
         if (currentPath.isEmpty()) return;
@@ -349,16 +477,14 @@ public class GameBoardView extends View {
         }
         if (!cell.isSelected) {
             if (Math.abs(cell.row - lastCell.row) <= 1 && Math.abs(cell.col - lastCell.col) <= 1) {
-                cell.isSelected = true;
-                currentPath.add(cell);
+                cell.isSelected = true; currentPath.add(cell);
             }
         }
     }
 
     private void finishSelection() {
         if (currentPath.size() < 3) {
-            clearSelection();
-            if (gameListener != null) gameListener.onInvalidWord();
+            startErrorShakeAnimation();
             return;
         }
 
@@ -368,7 +494,10 @@ public class GameBoardView extends View {
 
         if (dictionaryManager.isWordValid(word)) {
             int score = ScoreCalculator.calculateComboScore(word, dictionaryManager);
+
             GridCell lastCell = currentPath.get(currentPath.size() - 1);
+            floatingTexts.add(new FloatingText("+" + score + (score > 10 ? " KOMBO!" : ""),
+                    lastCell.col * cellSize + cellSize/2, lastCell.row * cellSize));
 
             List<GridCell> triggeredPowerCells = new ArrayList<>();
             boolean[][] cellsToClear = new boolean[gridSize][gridSize];
@@ -381,9 +510,8 @@ public class GameBoardView extends View {
 
             for (GridCell cell : currentPath) {
                 cellsToClear[cell.row][cell.col] = true;
-                if (cell.power != GridCell.SpecialPower.NONE) {
-                    triggeredPowerCells.add(cell);
-                }
+                if (cell.power != GridCell.SpecialPower.NONE) triggeredPowerCells.add(cell);
+                spawnParticles(cell.col * cellSize + cellSize/2, cell.row * cellSize + cellSize/2, 10);
             }
 
             for (GridCell cell : triggeredPowerCells) {
@@ -405,12 +533,31 @@ public class GameBoardView extends View {
             }
 
             if (gameListener != null) gameListener.onWordFound(score, word);
+
             clearSelection();
             startExplosionAnimation(cellsToExplode);
         } else {
-            if (gameListener != null) gameListener.onInvalidWord();
-            clearSelection();
+            startErrorShakeAnimation();
         }
+    }
+
+    private void startErrorShakeAnimation() {
+        isErrorShaking = true;
+        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+        animator.setDuration(400);
+        animator.addUpdateListener(animation -> {
+            errorShakeProgress = (float) animation.getAnimatedValue();
+            invalidate();
+        });
+        animator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                isErrorShaking = false;
+                clearSelection();
+                if (gameListener != null) gameListener.onInvalidWord();
+            }
+        });
+        animator.start();
     }
 
     private void startExplosionAnimation(List<GridCell> cellsToExplode) {
@@ -420,7 +567,7 @@ public class GameBoardView extends View {
         explodingCells.addAll(cellsToExplode);
 
         ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
-        animator.setDuration(450);
+        animator.setDuration(400);
         animator.addUpdateListener(animation -> {
             explosionProgress = (float) animation.getAnimatedValue();
             invalidate();
@@ -430,49 +577,78 @@ public class GameBoardView extends View {
             public void onAnimationEnd(Animator animation) {
                 isAnimating = false;
                 for (GridCell cell : explodingCells) {
-                    cell.letter = ' ';
-                    cell.power = GridCell.SpecialPower.NONE;
+                    cell.letter = ' '; cell.power = GridCell.SpecialPower.NONE;
                 }
-                applyGravity();
+                startGravityAnimation();
+            }
+        });
+        animator.start();
+    }
+
+    private void startGravityAnimation() {
+        applyGravityLogic();
+        isGravityFalling = true;
+
+        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+        animator.setDuration(500);
+
+        animator.setInterpolator(new BounceInterpolator());
+
+        animator.addUpdateListener(animation -> {
+            gravityProgress = (float) animation.getAnimatedValue();
+            invalidate();
+        });
+        animator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                isGravityFalling = false;
                 if (gameListener != null) gameListener.onGridAnalyzed(calculateAvailableWords());
             }
         });
         animator.start();
     }
 
-    public void shuffleBoard() {
-        if (cells == null || isShuffling) return;
-        isShuffling = true;
-        ValueAnimator animator = ValueAnimator.ofFloat(1f, 0f, 1f);
-        animator.setDuration(600);
+    private void startFishAnimation(List<GridCell> exp) {
+        isFishEating = true;
+        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+        animator.setDuration(1500);
         animator.addUpdateListener(animation -> {
-            shuffleProgress = (float) animation.getAnimatedValue();
-            if (shuffleProgress <= 0.05f && animation.getCurrentPlayTime() > 250) {
-                List<Character> letters = new ArrayList<>();
-                List<GridCell.SpecialPower> powers = new ArrayList<>();
-                for (int r = 0; r < gridSize; r++) {
-                    for (int c = 0; c < gridSize; c++) {
-                        letters.add(cells[r][c].letter);
-                        powers.add(cells[r][c].power);
-                    }
-                }
-                Collections.shuffle(letters, random); Collections.shuffle(powers, random);
-                int index = 0;
-                for (int r = 0; r < gridSize; r++) {
-                    for (int c = 0; c < gridSize; c++) {
-                        cells[r][c].letter = letters.get(index);
-                        cells[r][c].power = powers.get(index);
-                        index++;
-                    }
-                }
-                clearSelection();
+            fishProgress = (float) animation.getAnimatedValue();
+            fishX = getWidth() * fishProgress;
+            fishY = getHeight() / 2f + (float)Math.sin(fishProgress * Math.PI * 4) * 100f;
+            invalidate();
+        });
+        animator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                isFishEating = false;
+                startExplosionAnimation(exp);
+            }
+        });
+        animator.start();
+    }
+
+    private void startSwapAnimation(GridCell cell1, GridCell cell2) {
+        isSwapping = true; swapTarget1 = cell1; swapTarget2 = cell2;
+
+        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+        animator.setDuration(500);
+        final boolean[] swapped = {false};
+
+        animator.addUpdateListener(animation -> {
+            swapProgress = (float) animation.getAnimatedValue();
+            if (swapProgress >= 0.5f && !swapped[0]) {
+                char tempL = cell1.letter; GridCell.SpecialPower tempP = cell1.power;
+                cell1.letter = cell2.letter; cell1.power = cell2.power;
+                cell2.letter = tempL; cell2.power = tempP;
+                swapped[0] = true;
             }
             invalidate();
         });
         animator.addListener(new AnimatorListenerAdapter() {
             @Override
             public void onAnimationEnd(Animator animation) {
-                isShuffling = false;
+                isSwapping = false; swapTarget1 = null; swapTarget2 = null;
                 if (gameListener != null) gameListener.onGridAnalyzed(calculateAvailableWords());
             }
         });
@@ -480,11 +656,28 @@ public class GameBoardView extends View {
     }
 
     private void markPowerAffectedCells(GridCell.SpecialPower power, int centerRow, int centerCol, boolean[][] cellsToClear) {
+        float cx = centerCol * cellSize + cellSize/2;
+        float cy = centerRow * cellSize + cellSize/2;
+
         switch (power) {
-            case ROW_CLEAR: for (int c = 0; c < gridSize; c++) cellsToClear[centerRow][c] = true; break;
-            case COLUMN_CLEAR: for (int r = 0; r < gridSize; r++) cellsToClear[r][centerCol] = true; break;
-            case AREA_EXPLODE: markSquare(centerRow, centerCol, 1, cellsToClear); break;
-            case MEGA_EXPLODE: markSquare(centerRow, centerCol, 2, cellsToClear); break;
+            case ROW_CLEAR:
+                for (int c = 0; c < gridSize; c++) cellsToClear[centerRow][c] = true;
+                activeEffects.add(new Effect(EffectType.LASER_H, cx, cy, Color.CYAN));
+                break;
+            case COLUMN_CLEAR:
+                for (int r = 0; r < gridSize; r++) cellsToClear[r][centerCol] = true;
+                activeEffects.add(new Effect(EffectType.LASER_V, cx, cy, Color.MAGENTA));
+                break;
+            case AREA_EXPLODE:
+                markSquare(centerRow, centerCol, 1, cellsToClear);
+                activeEffects.add(new Effect(EffectType.SHOCKWAVE, cx, cy, Color.YELLOW));
+                startCameraShake(15f);
+                break;
+            case MEGA_EXPLODE:
+                markSquare(centerRow, centerCol, 2, cellsToClear);
+                activeEffects.add(new Effect(EffectType.SHOCKWAVE, cx, cy, Color.RED));
+                startCameraShake(30f);
+                break;
             default: break;
         }
     }
@@ -497,8 +690,12 @@ public class GameBoardView extends View {
         }
     }
 
-    private void applyGravity() {
+    private void applyGravityLogic() {
+        dropOffsets = new int[gridSize][gridSize];
+
         for (int c = 0; c < gridSize; c++) {
+            int emptySpacesCount = 0;
+
             int emptyRow = gridSize - 1;
             for (int r = gridSize - 1; r >= 0; r--) {
                 if (cells[r][c].letter != ' ') {
@@ -507,16 +704,21 @@ public class GameBoardView extends View {
                         cells[emptyRow][c].power = cells[r][c].power;
                         cells[r][c].letter = ' ';
                         cells[r][c].power = GridCell.SpecialPower.NONE;
+
+                        dropOffsets[emptyRow][c] = emptyRow - r;
                     }
                     emptyRow--;
+                } else {
+                    emptySpacesCount++;
                 }
             }
+
             for (int r = emptyRow; r >= 0; r--) {
                 cells[r][c].letter = LetterGenerator.getRandomLetter();
                 cells[r][c].power = GridCell.SpecialPower.NONE;
+                dropOffsets[r][c] = emptySpacesCount;
             }
         }
-        invalidate();
     }
 
     private void clearSelection() {
@@ -553,5 +755,60 @@ public class GameBoardView extends View {
             }
         }
         visited[r][c] = false;
+    }
+
+    private void spawnParticles(float x, float y, int count) {
+        int[] colors = {Color.RED, Color.YELLOW, Color.GREEN, Color.BLUE, Color.MAGENTA};
+        for (int i = 0; i < count; i++) {
+            particles.add(new Particle(x, y, colors[random.nextInt(colors.length)]));
+        }
+    }
+
+    private void startCameraShake(float intensity) {
+        ValueAnimator animator = ValueAnimator.ofFloat(intensity, 0f);
+        animator.setDuration(400);
+        animator.addUpdateListener(animation -> {
+            float val = (float) animation.getAnimatedValue();
+            cameraShakeOffsetX = (random.nextFloat() - 0.5f) * val * 2;
+            cameraShakeOffsetY = (random.nextFloat() - 0.5f) * val * 2;
+            invalidate();
+        });
+        animator.start();
+    }
+
+    private class Particle {
+        float x, y, vx, vy, life = 1f, radius;
+        int color;
+        Particle(float x, float y, int color) {
+            this.x = x; this.y = y; this.color = color;
+            double angle = random.nextDouble() * Math.PI * 2;
+            double speed = random.nextDouble() * 15 + 5;
+            vx = (float) (Math.cos(angle) * speed);
+            vy = (float) (Math.sin(angle) * speed);
+            radius = random.nextFloat() * 8 + 4;
+        }
+        void update() {
+            x += vx; y += vy;
+            vy += 0.5f;
+            life -= 0.03f;
+        }
+    }
+
+    private class FloatingText {
+        float x, y, life = 1f; String text;
+        FloatingText(String text, float x, float y) { this.text = text; this.x = x; this.y = y; }
+        void update() { y -= 2f; life -= 0.02f; }
+    }
+
+    enum EffectType { LASER_H, LASER_V, SHOCKWAVE }
+    private class Effect {
+        EffectType type; float x, y, life = 1f, radius = 0f; int color;
+        Effect(EffectType type, float x, float y, int color) {
+            this.type = type; this.x = x; this.y = y; this.color = color;
+        }
+        void update() {
+            life -= 0.05f;
+            if (type == EffectType.SHOCKWAVE) radius += 20f;
+        }
     }
 }
