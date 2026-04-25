@@ -32,7 +32,6 @@ public class GameBoardView extends View {
     private int gridSize = 8;
     private GridCell[][] cells;
     private List<GridCell> currentPath = new ArrayList<>();
-
     private int[][] dropOffsets;
 
     // ESTETİK BOYALAR
@@ -40,6 +39,14 @@ public class GameBoardView extends View {
     private Paint powerBgPaint, powerPaint, linePaint, particlePaint, effectPaint, floatingTextPaint;
     private Paint errorCellPaint;
     private float cellSize;
+
+    // OYUN SONU EKRANI BOYALARI VE DEĞİŞKENLERİ
+    private boolean isGameOver = false;
+    private int finalScore = 0;
+    private int finalWordCount = 0;
+    private String finalLongestWord = "";
+    private Paint overlayPaint, dialogBgPaint, gameOverTitlePaint, statTextPaint, buttonPaint, buttonTextPaint;
+    private RectF returnMenuButtonRect;
 
     private DictionaryManager dictionaryManager;
     private GameListener gameListener;
@@ -56,7 +63,6 @@ public class GameBoardView extends View {
     private boolean isErrorShaking = false;
     private float errorShakeProgress = 0f;
 
-    // Özel Efektler
     private List<Particle> particles = new ArrayList<>();
     private List<FloatingText> floatingTexts = new ArrayList<>();
     private List<Effect> activeEffects = new ArrayList<>();
@@ -70,20 +76,19 @@ public class GameBoardView extends View {
     private JokerMode currentJokerMode = JokerMode.NONE;
     private GridCell swapTarget1 = null;
     private GridCell swapTarget2 = null;
-
     private boolean isSwapping = false;
     private float swapProgress = 1f;
 
-    // Balık Jokeri Animasyonu
     private boolean isFishEating = false;
     private float fishProgress = 0f;
-    private List<GridCell> targetFishCells = new ArrayList<>(); // Yüzülecek hedefler
+    private List<GridCell> targetFishCells = new ArrayList<>();
 
     public interface GameListener {
         void onWordFound(int scoreToAdd, String word);
         void onInvalidWord();
         void onGridAnalyzed(int availableWordCount);
         void onJokerUsed(String jokerName);
+        void onReturnToMenu(); // OYUN BİTİŞ BUTONU İÇİN YENİ METOT
     }
 
     public GameBoardView(Context context, AttributeSet attrs) {
@@ -92,62 +97,50 @@ public class GameBoardView extends View {
     }
 
     private void init() {
-        // --- DAHA OYUNUMSU (CANDY) TASARIM BOYALARI ---
+        // --- GRID BOYALARI ---
+        tilePaint = new Paint(); tilePaint.setColor(Color.parseColor("#FFF3E0")); tilePaint.setStyle(Paint.Style.FILL); tilePaint.setAntiAlias(true);
+        tileShadowPaint = new Paint(); tileShadowPaint.setColor(Color.parseColor("#D7CCC8")); tileShadowPaint.setStyle(Paint.Style.FILL); tileShadowPaint.setAntiAlias(true);
+        selectedTilePaint = new Paint(); selectedTilePaint.setColor(Color.parseColor("#FFCA28")); selectedTilePaint.setStyle(Paint.Style.FILL); selectedTilePaint.setAntiAlias(true);
+        errorCellPaint = new Paint(); errorCellPaint.setColor(Color.parseColor("#EF5350")); errorCellPaint.setStyle(Paint.Style.FILL); errorCellPaint.setAntiAlias(true);
 
-        tilePaint = new Paint();
-        tilePaint.setColor(Color.parseColor("#FFF3E0"));
-        tilePaint.setStyle(Paint.Style.FILL);
-        tilePaint.setAntiAlias(true);
+        textPaint = new Paint(); textPaint.setColor(Color.parseColor("#1A237E")); textPaint.setTextSize(65f); textPaint.setTextAlign(Paint.Align.CENTER);
+        textPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD)); textPaint.setAntiAlias(true);
 
-        tileShadowPaint = new Paint();
-        tileShadowPaint.setColor(Color.parseColor("#D7CCC8"));
-        tileShadowPaint.setStyle(Paint.Style.FILL);
-        tileShadowPaint.setAntiAlias(true);
+        powerBgPaint = new Paint(); powerBgPaint.setColor(Color.argb(180, 255, 255, 255)); powerBgPaint.setStyle(Paint.Style.FILL); powerBgPaint.setAntiAlias(true);
+        powerPaint = new Paint(); powerPaint.setColor(Color.RED); powerPaint.setTextSize(45f); powerPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+        powerPaint.setTextAlign(Paint.Align.CENTER); powerPaint.setAntiAlias(true);
 
-        selectedTilePaint = new Paint();
-        selectedTilePaint.setColor(Color.parseColor("#FFCA28"));
-        selectedTilePaint.setStyle(Paint.Style.FILL);
-        selectedTilePaint.setAntiAlias(true);
-
-        errorCellPaint = new Paint();
-        errorCellPaint.setColor(Color.parseColor("#EF5350"));
-        errorCellPaint.setStyle(Paint.Style.FILL);
-        errorCellPaint.setAntiAlias(true);
-
-        textPaint = new Paint();
-        textPaint.setColor(Color.parseColor("#1A237E"));
-        textPaint.setTextSize(65f);
-        textPaint.setTextAlign(Paint.Align.CENTER);
-        textPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
-        textPaint.setAntiAlias(true);
-
-        powerBgPaint = new Paint();
-        powerBgPaint.setColor(Color.argb(180, 255, 255, 255));
-        powerBgPaint.setStyle(Paint.Style.FILL);
-        powerBgPaint.setAntiAlias(true);
-
-        powerPaint = new Paint();
-        powerPaint.setColor(Color.RED);
-        powerPaint.setTextSize(45f);
-        powerPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
-        powerPaint.setTextAlign(Paint.Align.CENTER);
-        powerPaint.setAntiAlias(true);
-
-        linePaint = new Paint();
-        linePaint.setColor(Color.argb(150, 255, 193, 7));
-        linePaint.setStrokeWidth(25f);
-        linePaint.setStrokeJoin(Paint.Join.ROUND);
-        linePaint.setStrokeCap(Paint.Cap.ROUND);
-        linePaint.setStyle(Paint.Style.STROKE);
-        linePaint.setAntiAlias(true);
+        linePaint = new Paint(); linePaint.setColor(Color.argb(150, 255, 193, 7)); linePaint.setStrokeWidth(25f);
+        linePaint.setStrokeJoin(Paint.Join.ROUND); linePaint.setStrokeCap(Paint.Cap.ROUND); linePaint.setStyle(Paint.Style.STROKE); linePaint.setAntiAlias(true);
 
         particlePaint = new Paint(); particlePaint.setStyle(Paint.Style.FILL);
         effectPaint = new Paint(); effectPaint.setStyle(Paint.Style.FILL); effectPaint.setAntiAlias(true);
 
-        floatingTextPaint = new Paint(); floatingTextPaint.setColor(Color.parseColor("#4CAF50"));
-        floatingTextPaint.setTextSize(85f); floatingTextPaint.setTextAlign(Paint.Align.CENTER);
-        floatingTextPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+        floatingTextPaint = new Paint(); floatingTextPaint.setColor(Color.parseColor("#4CAF50")); floatingTextPaint.setTextSize(85f);
+        floatingTextPaint.setTextAlign(Paint.Align.CENTER); floatingTextPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
         floatingTextPaint.setShadowLayer(6, 3, 3, Color.BLACK);
+
+        // --- OYUN SONU EKRANI BOYALARI ---
+        overlayPaint = new Paint(); overlayPaint.setColor(Color.argb(200, 0, 0, 0)); // Siyah yarı saydam
+
+        dialogBgPaint = new Paint(); dialogBgPaint.setColor(Color.parseColor("#FFF3E0"));
+        dialogBgPaint.setStyle(Paint.Style.FILL); dialogBgPaint.setAntiAlias(true);
+
+        gameOverTitlePaint = new Paint(); gameOverTitlePaint.setColor(Color.parseColor("#E91E63"));
+        gameOverTitlePaint.setTextSize(80f); gameOverTitlePaint.setTextAlign(Paint.Align.CENTER);
+        gameOverTitlePaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+        gameOverTitlePaint.setShadowLayer(4, 2, 2, Color.parseColor("#FFCDD2")); gameOverTitlePaint.setAntiAlias(true);
+
+        statTextPaint = new Paint(); statTextPaint.setColor(Color.parseColor("#1A237E"));
+        statTextPaint.setTextSize(50f); statTextPaint.setTextAlign(Paint.Align.CENTER);
+        statTextPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD)); statTextPaint.setAntiAlias(true);
+
+        buttonPaint = new Paint(); buttonPaint.setColor(Color.parseColor("#4CAF50"));
+        buttonPaint.setStyle(Paint.Style.FILL); buttonPaint.setAntiAlias(true);
+
+        buttonTextPaint = new Paint(); buttonTextPaint.setColor(Color.WHITE);
+        buttonTextPaint.setTextSize(45f); buttonTextPaint.setTextAlign(Paint.Align.CENTER);
+        buttonTextPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD)); buttonTextPaint.setAntiAlias(true);
     }
 
     public void setupGame(int size, DictionaryManager dict, GameListener listener) {
@@ -156,6 +149,7 @@ public class GameBoardView extends View {
         this.gameListener = listener;
         this.cells = new GridCell[size][size];
         this.dropOffsets = new int[size][size];
+        this.isGameOver = false; // Oyuna başlarken sıfırla
 
         boolean isGridPlayable = false;
         int wordCount = 0;
@@ -166,13 +160,11 @@ public class GameBoardView extends View {
                     cells[r][c] = new GridCell(' ', r, c);
                 }
             }
-
             for (int r = 0; r < size; r++) {
                 for (int c = 0; c < size; c++) {
                     if (cells[r][c].letter == ' ') cells[r][c].letter = LetterGenerator.getRandomLetter();
                 }
             }
-
             wordCount = calculateAvailableWords();
             if (wordCount >= 3) isGridPlayable = true;
         }
@@ -180,12 +172,21 @@ public class GameBoardView extends View {
         invalidate();
     }
 
+    // OYUN BİTTİĞİNDE ÇAĞRILACAK METOT
+    public void showGameOverScreen(int score, int wordCount, String longestWord) {
+        this.isGameOver = true;
+        this.finalScore = score;
+        this.finalWordCount = wordCount;
+        this.finalLongestWord = (longestWord == null || longestWord.isEmpty()) ? "-" : longestWord;
+        invalidate(); // Ekranı yeniden çizmesi için tetikle
+    }
+
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         if (cells == null) return;
         cellSize = (float) getWidth() / gridSize;
-        float exactGridHeight = gridSize * cellSize; // Gridin gerçek kare yüksekliği
+        float exactGridHeight = gridSize * cellSize;
 
         canvas.save();
         canvas.translate(cameraShakeOffsetX, cameraShakeOffsetY);
@@ -289,7 +290,6 @@ public class GameBoardView extends View {
                 float textY = top + (currentCellSize / 2) - ((textPaint.descent() + textPaint.ascent()) / 2);
                 canvas.drawText(String.valueOf(cell.letter), left + (currentCellSize / 2), textY, textPaint);
 
-                // Özel güç sembolleri sadece kendi simgeleriyle gösteriliyor
                 if (cell.power != GridCell.SpecialPower.NONE) {
                     float px = left + currentCellSize - 35;
                     float py = top + 40;
@@ -301,10 +301,7 @@ public class GameBoardView extends View {
             }
         }
 
-        // --- GRID SINIRLARI İÇİNDE KALMASI GEREKEN EFEKTLER ---
         canvas.save();
-
-        // Lazerlerin sadece Grid boyutunda (Kare) kalması için sınırlandırma
         canvas.clipRect(0, 0, getWidth(), exactGridHeight);
 
         Iterator<Effect> eIter = activeEffects.iterator();
@@ -314,10 +311,8 @@ public class GameBoardView extends View {
             effectPaint.setColor(e.color);
             effectPaint.setAlpha((int)(255 * e.life));
             if (e.type == EffectType.LASER_H) {
-                // Sadece grid genişliği kadar çiz
                 canvas.drawRect(0, e.y - 15, getWidth(), e.y + 15, effectPaint);
             } else if (e.type == EffectType.LASER_V) {
-                // Sadece grid yüksekliği kadar çiz
                 canvas.drawRect(e.x - 15, 0, e.x + 15, exactGridHeight, effectPaint);
             } else if (e.type == EffectType.SHOCKWAVE) {
                 effectPaint.setStyle(Paint.Style.STROKE);
@@ -338,43 +333,25 @@ public class GameBoardView extends View {
             if (p.life <= 0) pIter.remove();
         }
 
-        // --- ÇOKLU BALIK ÇİZİMİ (Yok edilen harf sayısı kadar) ---
         if (isFishEating) {
-            Paint fishPnt = new Paint();
-            fishPnt.setColor(Color.parseColor("#FF5722"));
-            fishPnt.setAntiAlias(true);
+            Paint fishPnt = new Paint(); fishPnt.setColor(Color.parseColor("#FF5722")); fishPnt.setAntiAlias(true);
             Paint eyePaint = new Paint(); eyePaint.setColor(Color.WHITE);
 
             for (int i = 0; i < targetFishCells.size(); i++) {
                 GridCell cell = targetFishCells.get(i);
-
-                // Balıklar soldan sağa yüzer
                 float fX = -100f + (getWidth() + 200f) * fishProgress;
-
-                // Balıkların aynı anda değil hafif aralıklarla gelmesi için X ekseninde ufak kaydırma
                 fX -= i * 60f;
-
-                // Her balık yiyeceği harfin Y ekseni (satır) hizasında yüzer
                 float targetY = (cell.row * cellSize) + (cellSize / 2f);
-                float fY = targetY + (float)Math.sin(fishProgress * Math.PI * 8 + i) * 15f; // Suda yüzme dalgası
+                float fY = targetY + (float)Math.sin(fishProgress * Math.PI * 8 + i) * 15f;
 
-                // Balık Gövdesi
                 canvas.drawOval(new RectF(fX - 30, fY - 20, fX + 30, fY + 20), fishPnt);
-
-                // Balık Kuyruğu
                 Path tailPath = new Path();
-                tailPath.moveTo(fX - 25, fY);
-                tailPath.lineTo(fX - 60, fY - 25);
-                tailPath.lineTo(fX - 60, fY + 25);
-                tailPath.close();
+                tailPath.moveTo(fX - 25, fY); tailPath.lineTo(fX - 60, fY - 25); tailPath.lineTo(fX - 60, fY + 25); tailPath.close();
                 canvas.drawPath(tailPath, fishPnt);
-
-                // Balık Gözü
                 canvas.drawCircle(fX + 15, fY - 5, 5, eyePaint);
             }
         }
-
-        canvas.restore(); // Clip Rect'i Kapat
+        canvas.restore();
 
         Iterator<FloatingText> tIter = floatingTexts.iterator();
         while (tIter.hasNext()) {
@@ -384,8 +361,39 @@ public class GameBoardView extends View {
             canvas.drawText(ft.text, ft.x, ft.y, floatingTextPaint);
             if (ft.life <= 0) tIter.remove();
         }
+        canvas.restore();
 
-        canvas.restore(); // Genel Transformu Kapat
+        // OYUN SONU EKRANINI ÇİZ
+        if (isGameOver) {
+            // Yarı saydam siyah arkaplan
+            canvas.drawRect(0, 0, getWidth(), getHeight(), overlayPaint);
+
+            float dialogWidth = getWidth() * 0.85f;
+            float dialogHeight = 650f;
+            float left = (getWidth() - dialogWidth) / 2f;
+            float top = (getHeight() - dialogHeight) / 2f;
+            float centerX = getWidth() / 2f;
+
+            // Kutu Arkaplanı
+            RectF dialogRect = new RectF(left, top, left + dialogWidth, top + dialogHeight);
+            canvas.drawRoundRect(dialogRect, 50f, 50f, dialogBgPaint);
+
+            // Yazılar
+            canvas.drawText("OYUN BİTTİ!", centerX, top + 130f, gameOverTitlePaint);
+            canvas.drawText("Toplam Puan: " + finalScore, centerX, top + 260f, statTextPaint);
+            canvas.drawText("Bulunan Kelime: " + finalWordCount, centerX, top + 340f, statTextPaint);
+            canvas.drawText("En Uzun: " + finalLongestWord, centerX, top + 420f, statTextPaint);
+
+            // Menüye Dön Butonu Çizimi
+            float btnWidth = dialogWidth * 0.8f;
+            float btnHeight = 110f;
+            float btnLeft = centerX - btnWidth / 2f;
+            float btnTop = top + 490f;
+            returnMenuButtonRect = new RectF(btnLeft, btnTop, btnLeft + btnWidth, btnTop + btnHeight);
+
+            canvas.drawRoundRect(returnMenuButtonRect, 30f, 30f, buttonPaint);
+            canvas.drawText("ANA MENÜYE DÖN", centerX, btnTop + 75f, buttonTextPaint);
+        }
 
         if (!particles.isEmpty() || !floatingTexts.isEmpty() || !activeEffects.isEmpty() || isShuffling || isFishEating) {
             invalidate();
@@ -393,7 +401,6 @@ public class GameBoardView extends View {
     }
 
     private String getPowerSymbol(GridCell.SpecialPower power) {
-        // Temsili A harfi kaldırıldı, sadece dökümandaki özel semboller
         switch (power) {
             case ROW_CLEAR: return "⇆";
             case AREA_EXPLODE: return "✹";
@@ -405,6 +412,20 @@ public class GameBoardView extends View {
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
+        // EĞER OYUN BİTTİYSE SADECE BUTON TIKLAMALARINI DİNLE
+        if (isGameOver) {
+            if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                float x = event.getX();
+                float y = event.getY();
+                if (returnMenuButtonRect != null && returnMenuButtonRect.contains(x, y)) {
+                    if (gameListener != null) {
+                        gameListener.onReturnToMenu(); // Activity'e haber ver
+                    }
+                }
+            }
+            return true; // Altındaki gridin dokunmatik olaylarını engeller
+        }
+
         if (cells == null || isAnimating || isShuffling || isSwapping || isGravityFalling || isErrorShaking) return false;
 
         float x = event.getX(), y = event.getY();
@@ -538,7 +559,6 @@ public class GameBoardView extends View {
         List<GridCell> exp = new ArrayList<>();
         int count = 0;
 
-        // Tabloya göre 5 tane siliyorsak, 5 balık hedefi ekliyoruz.
         while (count < 5) {
             int r = random.nextInt(gridSize); int c = random.nextInt(gridSize);
             if (!exp.contains(cells[r][c])) { exp.add(cells[r][c]); count++; }
@@ -711,7 +731,7 @@ public class GameBoardView extends View {
     private void startFishAnimation(List<GridCell> exp) {
         isFishEating = true;
         targetFishCells.clear();
-        targetFishCells.addAll(exp); // Hedefleri listeye ekle
+        targetFishCells.addAll(exp);
 
         ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
         animator.setDuration(1500);

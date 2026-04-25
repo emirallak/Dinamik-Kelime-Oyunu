@@ -38,6 +38,9 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
     private String longestWordFound = "";
     private long startTime;
 
+    // Oyun bitti mi kontrolü için
+    private boolean isGameOver = false;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -75,11 +78,15 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
         }).start();
 
         if (btnUseJoker != null) {
-            btnUseJoker.setOnClickListener(v -> showJokerDialog());
+            btnUseJoker.setOnClickListener(v -> {
+                if (!isGameOver) showJokerDialog();
+            });
         }
 
         if (btnFinishGame != null) {
-            btnFinishGame.setOnClickListener(v -> showExitConfirmation());
+            btnFinishGame.setOnClickListener(v -> {
+                if (!isGameOver) showExitConfirmation();
+            });
         }
     }
 
@@ -92,6 +99,8 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
 
     @Override
     public void onWordFound(int scoreToAdd, String word) {
+        if (isGameOver) return;
+
         currentScore += scoreToAdd;
         remainingMoves--;
 
@@ -105,6 +114,8 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
 
     @Override
     public void onInvalidWord() {
+        if (isGameOver) return;
+
         remainingMoves--;
         updateUI();
         Toast.makeText(this, "Geçersiz kelime! Hamle gitti.", Toast.LENGTH_SHORT).show();
@@ -113,6 +124,8 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
 
     @Override
     public void onGridAnalyzed(int availableWordCount) {
+        if (isGameOver) return;
+
         runOnUiThread(() -> {
             if (tvAvailableWords != null) {
                 tvAvailableWords.setText("Oluşturulabilir Kelime Sayısı: " + availableWordCount);
@@ -122,9 +135,14 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
 
     @Override
     public void onJokerUsed(String jokerName) {
-        // İleride burada veritabanından joker eksiltme işlemini yapacaksın.
-        // Şimdilik animasyonları test edebilmen için veritabanı kontrolünü devre dışı bıraktık.
+        if (isGameOver) return;
         Toast.makeText(this, jokerName + " kullanıldı!", Toast.LENGTH_SHORT).show();
+    }
+
+    // YENİ EKLENEN: Oyun sonu ekranındaki "Ana Menüye Dön" butonuna basıldığında çağrılır
+    @Override
+    public void onReturnToMenu() {
+        finish();
     }
 
     private void updateUI() {
@@ -132,36 +150,61 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
         if (tvMoveCount != null) tvMoveCount.setText("Hamle: " + remainingMoves);
     }
 
+    // PDF DÖKÜMANI MADDE 11: GERİ TUŞU KONTROLÜ
+    @Override
+    public void onBackPressed() {
+        if (isGameOver) {
+            super.onBackPressed();
+            return;
+        }
+        showExitConfirmation();
+    }
+
     private void showExitConfirmation() {
         new AlertDialog.Builder(this)
-                .setTitle("Oyunu Bitir")
-                .setMessage("Skorunuz kaydedilsin mi?")
-                .setPositiveButton("Evet", (dialog, which) -> saveCurrentGameAndExit())
+                .setTitle("Oyundan Çık")
+                .setMessage("Oyundan çıkmak istediğinize emin misiniz?")
+                .setPositiveButton("Evet", (dialog, which) -> {
+                    saveCurrentGame();
+                    finish();
+                })
                 .setNegativeButton("Hayır", null)
                 .show();
     }
 
-    private void saveCurrentGameAndExit() {
+    private void saveCurrentGame() {
         if (currentScore > 0 || foundWordCount > 0) {
             int durationSeconds = (int) ((System.currentTimeMillis() - startTime) / 1000);
             dbHelper.saveGame(gridSize, currentScore, foundWordCount, longestWordFound, durationSeconds);
-            Toast.makeText(this, "Skor kaydedildi!", Toast.LENGTH_SHORT).show();
         }
-        finish();
     }
 
+    // YENİ DÜZENLEME: Hamle bitince oyunu kaydet ve GameBoardView'a bitiş ekranını çizdir
     private void checkGameOver() {
-        if (remainingMoves <= 0) saveCurrentGameAndExit();
+        if (remainingMoves <= 0 && !isGameOver) {
+            isGameOver = true;
+
+            // Veritabanına kaydet
+            saveCurrentGame();
+
+            if (tvAvailableWords != null) {
+                tvAvailableWords.setText("Oyun Bitti!");
+            }
+
+            // Oyun alanına kendi özel bitiş ekranını çizdiriyoruz
+            if (gameBoardView != null) {
+                gameBoardView.showGameOverScreen(currentScore, foundWordCount, longestWordFound);
+            }
+        }
     }
 
-    // 1. GERÇEK JOKER MENÜSÜ (Veritabanındaki sayıları okur)
+    // --- JOKER MENÜSÜ ---
     private void showJokerDialog() {
         if (gameBoardView == null || currentUser == null) {
             Toast.makeText(this, "Joker sistemi şu an yüklenemedi.", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        // Kullanıcının veritabanındaki jokerlerini çek
         List<JokerEntity> userJokers = appDatabase.appDao().getUserJokers(currentUser.id);
         int cLolipop = 0, cWheel = 0, cSwap = 0, cFish = 0, cShuffle = 0, cParty = 0;
 
@@ -174,7 +217,6 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
             else if (j.jokerName.equals("Parti Güçlendiricisi")) cParty = j.quantity;
         }
 
-        // SADECE JOKERLER VAR, ALTIN ALMA MENÜSÜ KALDIRILDI
         String[] jokerNames = {
                 "🍭 Lolipop Kırıcı (" + cLolipop + " Adet)",
                 "🎡 Tekerlek (" + cWheel + " Adet)",
@@ -220,7 +262,6 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
                 .show();
     }
 
-    // 2. JOKER HARCAMA KONTROLÜ (Veritabanından eksiltir)
     private boolean consumeJoker(String jokerName) {
         if (currentUser == null) return false;
 
@@ -228,41 +269,11 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
 
         if (joker == null || joker.quantity <= 0) {
             Toast.makeText(this, "Elinizde hiç " + jokerName + " kalmamış! Altınla satın almalısınız.", Toast.LENGTH_LONG).show();
-            // İstersen burada direkt showBuyGoldDialog() metodunu da tetikleyebilirsin.
             return false;
         }
 
-        // Joker var, 1 tane düşür ve veritabanını güncelle
         joker.quantity -= 1;
         appDatabase.appDao().updateJoker(joker);
         return true;
-    }
-
-    // 3. DÜMENDEN ALTIN ALMA EKRANI
-    private void showBuyGoldDialog() {
-        android.view.View dialogView = getLayoutInflater().inflate(R.layout.dialog_buy_gold, null);
-
-        AlertDialog paymentDialog = new AlertDialog.Builder(this)
-                .setView(dialogView)
-                .create();
-
-        Button btnConfirm = dialogView.findViewById(R.id.btnConfirmPurchase);
-
-        btnConfirm.setOnClickListener(v -> {
-            // ÖDEME ONAYLANDI (Sahte Tabi ki)
-            // Eğer UserEntity'de altın tutuyorsan burada ekleyip güncelleyebilirsin:
-            // currentUser.gold += 1000;
-            // appDatabase.appDao().updateUser(currentUser);
-
-            // Yada SharedPrefs ile basitçe tutuyorsan:
-            SharedPrefsHelper prefs = new SharedPrefsHelper(this);
-            int currentGold = prefs.getInt("USER_GOLD", 0); // Varsayılan 0
-            prefs.saveInt("USER_GOLD", currentGold + 1000);
-
-            Toast.makeText(this, "Tebrikler! Ödeme alındı. 1000 Altın hesabına eklendi 🪙", Toast.LENGTH_LONG).show();
-            paymentDialog.dismiss();
-        });
-
-        paymentDialog.show();
     }
 }
