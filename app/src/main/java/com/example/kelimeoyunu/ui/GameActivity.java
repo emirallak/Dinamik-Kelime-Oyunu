@@ -2,14 +2,18 @@ package com.example.kelimeoyunu.ui;
 
 import android.app.AlertDialog;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.kelimeoyunu.database.JokerEntity;
 import java.util.List;
+import java.util.Locale;
 
 import com.example.kelimeoyunu.R;
 import com.example.kelimeoyunu.database.AppDatabase;
@@ -37,9 +41,11 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
     private int foundWordCount = 0;
     private String longestWordFound = "";
     private long startTime;
-
-    // Oyun bitti mi kontrolü için
     private boolean isGameOver = false;
+
+    private Handler timerHandler = new Handler(Looper.getMainLooper());
+    private Runnable timerRunnable;
+    private int currentDurationSeconds = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -64,7 +70,30 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
 
         gridSize = getIntent().getIntExtra("gridSize", 6);
         remainingMoves = getIntent().getIntExtra("moveCount", 15);
-        startTime = System.currentTimeMillis();
+
+        // MODERN GERİ TUŞU KONTROLÜ
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                if (isGameOver) {
+                    setEnabled(false);
+                    getOnBackPressedDispatcher().onBackPressed();
+                } else {
+                    showExitConfirmation();
+                }
+            }
+        });
+
+        timerRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (!isGameOver) {
+                    currentDurationSeconds = (int) ((System.currentTimeMillis() - startTime) / 1000);
+                    updateUI();
+                    timerHandler.postDelayed(this, 1000);
+                }
+            }
+        };
 
         updateUI();
         tvAvailableWords.setText("Sözlük yükleniyor... Lütfen bekleyin.");
@@ -95,6 +124,9 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
         gameBoardContainer.addView(gameBoardView);
         gameBoardView.setupGame(gridSize, dictionaryManager, this);
         tvAvailableWords.setText("Oyun Başladı! Kelime bulabilirsin.");
+
+        startTime = System.currentTimeMillis();
+        timerHandler.post(timerRunnable);
     }
 
     @Override
@@ -139,7 +171,6 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
         Toast.makeText(this, jokerName + " kullanıldı!", Toast.LENGTH_SHORT).show();
     }
 
-    // YENİ EKLENEN: Oyun sonu ekranındaki "Ana Menüye Dön" butonuna basıldığında çağrılır
     @Override
     public void onReturnToMenu() {
         finish();
@@ -147,17 +178,13 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
 
     private void updateUI() {
         if (tvScore != null) tvScore.setText("Puan: " + currentScore);
-        if (tvMoveCount != null) tvMoveCount.setText("Hamle: " + remainingMoves);
-    }
 
-    // PDF DÖKÜMANI MADDE 11: GERİ TUŞU KONTROLÜ
-    @Override
-    public void onBackPressed() {
-        if (isGameOver) {
-            super.onBackPressed();
-            return;
+        if (tvMoveCount != null) {
+            int minutes = currentDurationSeconds / 60;
+            int seconds = currentDurationSeconds % 60;
+            String timeStr = String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds);
+            tvMoveCount.setText("Hamle: " + remainingMoves + "   ⏱ " + timeStr);
         }
-        showExitConfirmation();
     }
 
     private void showExitConfirmation() {
@@ -174,31 +201,38 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
 
     private void saveCurrentGame() {
         if (currentScore > 0 || foundWordCount > 0) {
-            int durationSeconds = (int) ((System.currentTimeMillis() - startTime) / 1000);
-            dbHelper.saveGame(gridSize, currentScore, foundWordCount, longestWordFound, durationSeconds);
+            dbHelper.saveGame(gridSize, currentScore, foundWordCount, longestWordFound, currentDurationSeconds);
         }
     }
 
-    // YENİ DÜZENLEME: Hamle bitince oyunu kaydet ve GameBoardView'a bitiş ekranını çizdir
     private void checkGameOver() {
         if (remainingMoves <= 0 && !isGameOver) {
             isGameOver = true;
 
-            // Veritabanına kaydet
+            if (timerHandler != null && timerRunnable != null) {
+                timerHandler.removeCallbacks(timerRunnable);
+            }
+
             saveCurrentGame();
 
             if (tvAvailableWords != null) {
                 tvAvailableWords.setText("Oyun Bitti!");
             }
 
-            // Oyun alanına kendi özel bitiş ekranını çizdiriyoruz
             if (gameBoardView != null) {
-                gameBoardView.showGameOverScreen(currentScore, foundWordCount, longestWordFound);
+                gameBoardView.showGameOverScreen(currentScore, foundWordCount, longestWordFound, currentDurationSeconds);
             }
         }
     }
 
-    // --- JOKER MENÜSÜ ---
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (timerHandler != null && timerRunnable != null) {
+            timerHandler.removeCallbacks(timerRunnable);
+        }
+    }
+
     private void showJokerDialog() {
         if (gameBoardView == null || currentUser == null) {
             Toast.makeText(this, "Joker sistemi şu an yüklenemedi.", Toast.LENGTH_SHORT).show();
@@ -229,51 +263,99 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
         new AlertDialog.Builder(this)
                 .setTitle("Jokerlerin")
                 .setItems(jokerNames, (dialog, which) -> {
+                    String selectedJoker = "";
                     switch (which) {
-                        case 0:
-                            if (consumeJoker("Lolipop Kırıcı")) {
-                                gameBoardView.enableJokerMode(GameBoardView.JokerMode.LOLLIPOP);
-                                Toast.makeText(this, "Yok edilecek harfe dokun!", Toast.LENGTH_SHORT).show();
-                            }
-                            break;
-                        case 1:
-                            if (consumeJoker("Tekerlek")) {
-                                gameBoardView.enableJokerMode(GameBoardView.JokerMode.WHEEL);
-                                Toast.makeText(this, "Patlatılacak merkeze dokun!", Toast.LENGTH_SHORT).show();
-                            }
-                            break;
-                        case 2:
-                            if (consumeJoker("Serbest Değiştirme")) {
-                                gameBoardView.enableJokerMode(GameBoardView.JokerMode.SWAP_1);
-                                Toast.makeText(this, "Değişecek İLK harfe dokun!", Toast.LENGTH_SHORT).show();
-                            }
-                            break;
-                        case 3:
-                            if (consumeJoker("Balık")) gameBoardView.useFishJoker();
-                            break;
-                        case 4:
-                            if (consumeJoker("Harf Karıştırma")) gameBoardView.shuffleBoard();
-                            break;
-                        case 5:
-                            if (consumeJoker("Parti Güçlendiricisi")) gameBoardView.usePartyBooster();
-                            break;
+                        case 0: selectedJoker = "Lolipop Kırıcı"; break;
+                        case 1: selectedJoker = "Tekerlek"; break;
+                        case 2: selectedJoker = "Serbest Değiştirme"; break;
+                        case 3: selectedJoker = "Balık"; break;
+                        case 4: selectedJoker = "Harf Karıştırma"; break;
+                        case 5: selectedJoker = "Parti Güçlendiricisi"; break;
                     }
+                    handleJokerSelection(selectedJoker, which);
                 })
                 .show();
     }
 
-    private boolean consumeJoker(String jokerName) {
-        if (currentUser == null) return false;
-
+    private void handleJokerSelection(String jokerName, int jokerIndex) {
         JokerEntity joker = appDatabase.appDao().getSpecificJoker(currentUser.id, jokerName);
 
-        if (joker == null || joker.quantity <= 0) {
-            Toast.makeText(this, "Elinizde hiç " + jokerName + " kalmamış! Altınla satın almalısınız.", Toast.LENGTH_LONG).show();
-            return false;
+        if (joker != null && joker.quantity > 0) {
+            joker.quantity -= 1;
+            appDatabase.appDao().updateJoker(joker);
+            activateJokerEffect(jokerIndex);
+        } else {
+            showBuyJokerDialog(jokerName, jokerIndex);
         }
+    }
 
-        joker.quantity -= 1;
-        appDatabase.appDao().updateJoker(joker);
-        return true;
+    private void showBuyJokerDialog(String jokerName, int index) {
+        int cost = getJokerCost(jokerName);
+        SharedPrefsHelper prefs = new SharedPrefsHelper(this);
+        int currentGold = prefs.getInt("USER_GOLD", 10000);
+
+        new AlertDialog.Builder(this)
+                .setTitle("Joker Satın Al")
+                .setMessage(jokerName + " jokerini " + cost + " altına satın almak istiyor musunuz?\n\nMevcut Altınınız: " + currentGold)
+                .setPositiveButton("Satın Al ve Kullan", (dialog, which) -> {
+                    if (currentGold >= cost) {
+                        prefs.saveInt("USER_GOLD", currentGold - cost);
+
+                        JokerEntity joker = appDatabase.appDao().getSpecificJoker(currentUser.id, jokerName);
+                        // HATANIN ÇÖZÜLDÜĞÜ SATIR: 3 Parametreli Constructor Kullanımı
+                        if (joker == null) {
+                            joker = new JokerEntity(currentUser.id, jokerName, 1);
+                            appDatabase.appDao().insertJoker(joker);
+                        } else {
+                            joker.quantity += 1;
+                            appDatabase.appDao().updateJoker(joker);
+                        }
+
+                        Toast.makeText(this, "Satın alındı! Kalan Altın: " + (currentGold - cost), Toast.LENGTH_SHORT).show();
+                        handleJokerSelection(jokerName, index);
+                    } else {
+                        Toast.makeText(this, "Yeterli altınınız yok!", Toast.LENGTH_LONG).show();
+                    }
+                })
+                .setNegativeButton("İptal", null)
+                .show();
+    }
+
+    private int getJokerCost(String jokerName) {
+        switch (jokerName) {
+            case "Balık": return 100;
+            case "Tekerlek": return 200;
+            case "Lolipop Kırıcı": return 75;
+            case "Serbest Değiştirme": return 125;
+            case "Harf Karıştırma": return 300;
+            case "Parti Güçlendiricisi": return 400;
+            default: return 0;
+        }
+    }
+
+    private void activateJokerEffect(int jokerIndex) {
+        switch (jokerIndex) {
+            case 0:
+                gameBoardView.enableJokerMode(GameBoardView.JokerMode.LOLLIPOP);
+                Toast.makeText(this, "Yok edilecek harfe dokun!", Toast.LENGTH_SHORT).show();
+                break;
+            case 1:
+                gameBoardView.enableJokerMode(GameBoardView.JokerMode.WHEEL);
+                Toast.makeText(this, "Patlatılacak merkeze dokun!", Toast.LENGTH_SHORT).show();
+                break;
+            case 2:
+                gameBoardView.enableJokerMode(GameBoardView.JokerMode.SWAP_1);
+                Toast.makeText(this, "Değişecek İLK harfe dokun!", Toast.LENGTH_SHORT).show();
+                break;
+            case 3:
+                gameBoardView.useFishJoker();
+                break;
+            case 4:
+                gameBoardView.shuffleBoard();
+                break;
+            case 5:
+                gameBoardView.usePartyBooster();
+                break;
+        }
     }
 }
