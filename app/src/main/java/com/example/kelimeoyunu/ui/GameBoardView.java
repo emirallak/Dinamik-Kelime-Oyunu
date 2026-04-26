@@ -283,7 +283,7 @@ public class GameBoardView extends View {
                 float textY = top + (currentCellSize / 2) - ((textPaint.descent() + textPaint.ascent()) / 2);
                 canvas.drawText(String.valueOf(cell.letter), left + (currentCellSize / 2), textY, textPaint);
 
-                // Dev Simge (Sadece ⇆, ✹, ⇅, ✪ sembolleri çizilir)
+                // Dev Simge
                 if (cell.power != GridCell.SpecialPower.NONE) {
                     float px = left + currentCellSize - 35;
                     float py = top + 40;
@@ -814,34 +814,93 @@ public class GameBoardView extends View {
         invalidate();
     }
 
-    private int calculateAvailableWords() {
-        HashSet<String> foundWords = new HashSet<>();
-        boolean[][] visited = new boolean[gridSize][gridSize];
-        for (int r = 0; r < gridSize; r++) {
-            for (int c = 0; c < gridSize; c++) {
-                findWordsDFS(r, c, "", visited, foundWords);
-            }
+    // --- AYRIK KÜMELER (DISJOINT SETS) İÇİN EKLENEN YENİ YARDIMCI SINIF ---
+    private class WordPath {
+        String word;
+        List<GridCell> pathCells;
+
+        WordPath(String word, List<GridCell> pathCells) {
+            this.word = word;
+            this.pathCells = new ArrayList<>(pathCells);
         }
-        return foundWords.size();
     }
 
-    private void findWordsDFS(int r, int c, String currentWord, boolean[][] visited, HashSet<String> foundWords) {
-        currentWord += cells[r][c].letter;
-        if (!dictionaryManager.isPrefixValid(currentWord)) return;
-        visited[r][c] = true;
-        if (currentWord.length() >= 3 && dictionaryManager.isWordValid(currentWord)) {
-            foundWords.add(currentWord);
+    // --- YENİ ALGORİTMA: ORTAK HARF KULLANMAYAN MAKSİMUM KELİME SAYISINI BULUR ---
+    private int calculateAvailableWords() {
+        List<WordPath> allPaths = new ArrayList<>();
+        boolean[][] visited = new boolean[gridSize][gridSize];
+        List<GridCell> currentPath = new ArrayList<>();
+
+        // Tahtadaki tüm olası kelime kombinasyonlarını ve yollarını bul
+        for (int r = 0; r < gridSize; r++) {
+            for (int c = 0; c < gridSize; c++) {
+                findPathsDFS(r, c, "", currentPath, visited, allPaths);
+            }
         }
+
+        // Açgözlü Algoritma (Greedy): Toplam kelime sayısını maksimize etmek için
+        // önce en kısa kelimeleri (3 harfli) alacak şekilde sıralıyoruz.
+        Collections.sort(allPaths, (a, b) -> Integer.compare(a.pathCells.size(), b.pathCells.size()));
+
+        int disjointWordCount = 0;
+        boolean[][] globalUsed = new boolean[gridSize][gridSize];
+
+        // Kesişmeyen (ortak harf kullanmayan) kelimeleri seç
+        for (WordPath wp : allPaths) {
+            boolean canUse = true;
+
+            // Bu kelimenin yolu üzerinde daha önce kullanılmış bir harf var mı?
+            for (GridCell cell : wp.pathCells) {
+                if (globalUsed[cell.row][cell.col]) {
+                    canUse = false;
+                    break;
+                }
+            }
+
+            // Eğer hiçbir harfi başka kelime tarafından kullanılmamışsa, listeye dahil et
+            if (canUse) {
+                disjointWordCount++;
+                for (GridCell cell : wp.pathCells) {
+                    globalUsed[cell.row][cell.col] = true; // Harfleri kullanıldı olarak işaretle
+                }
+            }
+        }
+
+        return disjointWordCount;
+    }
+
+    // --- YENİ ALGORİTMA İÇİN GÜNCELLENMİŞ DFS FONKSİYONU ---
+    private void findPathsDFS(int r, int c, String currentWord, List<GridCell> currentPath, boolean[][] visited, List<WordPath> allPaths) {
+        currentWord += cells[r][c].letter;
+        currentPath.add(cells[r][c]);
+        visited[r][c] = true;
+
+        // Prefix kontrolü: Eğer bu harf dizilimi sözlükte hiçbir kelimenin başlangıcı değilse, devam etme
+        if (!dictionaryManager.isPrefixValid(currentWord)) {
+            visited[r][c] = false;
+            currentPath.remove(currentPath.size() - 1);
+            return;
+        }
+
+        // Geçerli bir kelime bulduk mu?
+        if (currentWord.length() >= 3 && dictionaryManager.isWordValid(currentWord)) {
+            allPaths.add(new WordPath(currentWord, currentPath));
+        }
+
+        // 8 yöne hareket et
         for (int dr = -1; dr <= 1; dr++) {
             for (int dc = -1; dc <= 1; dc++) {
                 if (dr == 0 && dc == 0) continue;
                 int nr = r + dr, nc = c + dc;
                 if (nr >= 0 && nr < gridSize && nc >= 0 && nc < gridSize && !visited[nr][nc]) {
-                    findWordsDFS(nr, nc, currentWord, visited, foundWords);
+                    findPathsDFS(nr, nc, currentWord, currentPath, visited, allPaths);
                 }
             }
         }
+
+        // Backtracking (Geri Dönüş)
         visited[r][c] = false;
+        currentPath.remove(currentPath.size() - 1);
     }
 
     private void spawnParticles(float x, float y, int count) {
