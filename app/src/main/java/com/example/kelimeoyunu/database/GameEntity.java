@@ -9,14 +9,14 @@ public class GameEntity {
     @PrimaryKey(autoGenerate = true)
     public int gameId;
 
-    public String date;           // Örn: "15.05.2026"
-    public String gridSize;       // Örn: "8x8"
+    public String date;           // Örn: "2026-05-15 14:30:00"
+    public int gridSize;          // Örn: 8 (8x8 olduğunu belirtir)
     public int score;             // Toplam puan
     public int wordCount;         // Bulunan kelime sayısı
     public String longestWord;    // En uzun kelime
-    public String duration;       // Örn: "6 dk"
+    public int duration;          // Saniye cinsinden süre (Örn: 150)
 
-    public GameEntity(String date, String gridSize, int score, int wordCount, String longestWord, String duration) {
+    public GameEntity(String date, int gridSize, int score, int wordCount, String longestWord, int duration) {
         this.date = date;
         this.gridSize = gridSize;
         this.score = score;

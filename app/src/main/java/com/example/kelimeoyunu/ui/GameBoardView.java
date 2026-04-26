@@ -40,11 +40,12 @@ public class GameBoardView extends View {
     private Paint errorCellPaint;
     private float cellSize;
 
-    // OYUN SONU EKRANI BOYALARI VE DEĞİŞKENLERİ
     private boolean isGameOver = false;
     private int finalScore = 0;
     private int finalWordCount = 0;
     private String finalLongestWord = "";
+    private int finalDurationSeconds = 0;
+
     private Paint overlayPaint, dialogBgPaint, gameOverTitlePaint, statTextPaint, buttonPaint, buttonTextPaint;
     private RectF returnMenuButtonRect;
 
@@ -52,7 +53,6 @@ public class GameBoardView extends View {
     private GameListener gameListener;
     private Random random = new Random();
 
-    // ANİMASYON DURUMLARI
     private boolean isAnimating = false;
     private float explosionProgress = 0f;
     private List<GridCell> explodingCells = new ArrayList<>();
@@ -88,7 +88,7 @@ public class GameBoardView extends View {
         void onInvalidWord();
         void onGridAnalyzed(int availableWordCount);
         void onJokerUsed(String jokerName);
-        void onReturnToMenu(); // OYUN BİTİŞ BUTONU İÇİN YENİ METOT
+        void onReturnToMenu();
     }
 
     public GameBoardView(Context context, AttributeSet attrs) {
@@ -97,7 +97,7 @@ public class GameBoardView extends View {
     }
 
     private void init() {
-        // --- GRID BOYALARI ---
+        // --- CANDY TASARIM ---
         tilePaint = new Paint(); tilePaint.setColor(Color.parseColor("#FFF3E0")); tilePaint.setStyle(Paint.Style.FILL); tilePaint.setAntiAlias(true);
         tileShadowPaint = new Paint(); tileShadowPaint.setColor(Color.parseColor("#D7CCC8")); tileShadowPaint.setStyle(Paint.Style.FILL); tileShadowPaint.setAntiAlias(true);
         selectedTilePaint = new Paint(); selectedTilePaint.setColor(Color.parseColor("#FFCA28")); selectedTilePaint.setStyle(Paint.Style.FILL); selectedTilePaint.setAntiAlias(true);
@@ -120,11 +120,9 @@ public class GameBoardView extends View {
         floatingTextPaint.setTextAlign(Paint.Align.CENTER); floatingTextPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
         floatingTextPaint.setShadowLayer(6, 3, 3, Color.BLACK);
 
-        // --- OYUN SONU EKRANI BOYALARI ---
-        overlayPaint = new Paint(); overlayPaint.setColor(Color.argb(200, 0, 0, 0)); // Siyah yarı saydam
-
-        dialogBgPaint = new Paint(); dialogBgPaint.setColor(Color.parseColor("#FFF3E0"));
-        dialogBgPaint.setStyle(Paint.Style.FILL); dialogBgPaint.setAntiAlias(true);
+        // OYUN SONU EKRANI BOYALARI
+        overlayPaint = new Paint(); overlayPaint.setColor(Color.argb(200, 0, 0, 0));
+        dialogBgPaint = new Paint(); dialogBgPaint.setColor(Color.parseColor("#FFF3E0")); dialogBgPaint.setStyle(Paint.Style.FILL); dialogBgPaint.setAntiAlias(true);
 
         gameOverTitlePaint = new Paint(); gameOverTitlePaint.setColor(Color.parseColor("#E91E63"));
         gameOverTitlePaint.setTextSize(80f); gameOverTitlePaint.setTextAlign(Paint.Align.CENTER);
@@ -132,14 +130,11 @@ public class GameBoardView extends View {
         gameOverTitlePaint.setShadowLayer(4, 2, 2, Color.parseColor("#FFCDD2")); gameOverTitlePaint.setAntiAlias(true);
 
         statTextPaint = new Paint(); statTextPaint.setColor(Color.parseColor("#1A237E"));
-        statTextPaint.setTextSize(50f); statTextPaint.setTextAlign(Paint.Align.CENTER);
+        statTextPaint.setTextSize(48f); statTextPaint.setTextAlign(Paint.Align.CENTER);
         statTextPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD)); statTextPaint.setAntiAlias(true);
 
-        buttonPaint = new Paint(); buttonPaint.setColor(Color.parseColor("#4CAF50"));
-        buttonPaint.setStyle(Paint.Style.FILL); buttonPaint.setAntiAlias(true);
-
-        buttonTextPaint = new Paint(); buttonTextPaint.setColor(Color.WHITE);
-        buttonTextPaint.setTextSize(45f); buttonTextPaint.setTextAlign(Paint.Align.CENTER);
+        buttonPaint = new Paint(); buttonPaint.setColor(Color.parseColor("#4CAF50")); buttonPaint.setStyle(Paint.Style.FILL); buttonPaint.setAntiAlias(true);
+        buttonTextPaint = new Paint(); buttonTextPaint.setColor(Color.WHITE); buttonTextPaint.setTextSize(45f); buttonTextPaint.setTextAlign(Paint.Align.CENTER);
         buttonTextPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD)); buttonTextPaint.setAntiAlias(true);
     }
 
@@ -149,7 +144,7 @@ public class GameBoardView extends View {
         this.gameListener = listener;
         this.cells = new GridCell[size][size];
         this.dropOffsets = new int[size][size];
-        this.isGameOver = false; // Oyuna başlarken sıfırla
+        this.isGameOver = false;
 
         boolean isGridPlayable = false;
         int wordCount = 0;
@@ -172,13 +167,13 @@ public class GameBoardView extends View {
         invalidate();
     }
 
-    // OYUN BİTTİĞİNDE ÇAĞRILACAK METOT
-    public void showGameOverScreen(int score, int wordCount, String longestWord) {
+    public void showGameOverScreen(int score, int wordCount, String longestWord, int durationSeconds) {
         this.isGameOver = true;
         this.finalScore = score;
         this.finalWordCount = wordCount;
         this.finalLongestWord = (longestWord == null || longestWord.isEmpty()) ? "-" : longestWord;
-        invalidate(); // Ekranı yeniden çizmesi için tetikle
+        this.finalDurationSeconds = durationSeconds;
+        invalidate();
     }
 
     @Override
@@ -249,9 +244,7 @@ public class GameBoardView extends View {
                     currentAlpha = (int) (255 * (1f - explosionProgress));
                 }
                 else if (isShuffling) {
-                    float scale = shuffleProgress < 0.5f
-                            ? 1f - (shuffleProgress * 2f)
-                            : (shuffleProgress - 0.5f) * 2f;
+                    float scale = shuffleProgress < 0.5f ? 1f - (shuffleProgress * 2f) : (shuffleProgress - 0.5f) * 2f;
                     currentCellSize = cellSize * scale;
                     currentAlpha = (int) (255 * scale);
                 }
@@ -290,6 +283,7 @@ public class GameBoardView extends View {
                 float textY = top + (currentCellSize / 2) - ((textPaint.descent() + textPaint.ascent()) / 2);
                 canvas.drawText(String.valueOf(cell.letter), left + (currentCellSize / 2), textY, textPaint);
 
+                // Dev Simge (Sadece ⇆, ✹, ⇅, ✪ sembolleri çizilir)
                 if (cell.power != GridCell.SpecialPower.NONE) {
                     float px = left + currentCellSize - 35;
                     float py = top + 40;
@@ -301,6 +295,7 @@ public class GameBoardView extends View {
             }
         }
 
+        // GRID İÇİNE HAPSEDİLMİŞ LAZERLER
         canvas.save();
         canvas.clipRect(0, 0, getWidth(), exactGridHeight);
 
@@ -315,24 +310,21 @@ public class GameBoardView extends View {
             } else if (e.type == EffectType.LASER_V) {
                 canvas.drawRect(e.x - 15, 0, e.x + 15, exactGridHeight, effectPaint);
             } else if (e.type == EffectType.SHOCKWAVE) {
-                effectPaint.setStyle(Paint.Style.STROKE);
-                effectPaint.setStrokeWidth(15f);
-                canvas.drawCircle(e.x, e.y, e.radius, effectPaint);
-                effectPaint.setStyle(Paint.Style.FILL);
+                effectPaint.setStyle(Paint.Style.STROKE); effectPaint.setStrokeWidth(15f);
+                canvas.drawCircle(e.x, e.y, e.radius, effectPaint); effectPaint.setStyle(Paint.Style.FILL);
             }
             if (e.life <= 0) eIter.remove();
         }
 
         Iterator<Particle> pIter = particles.iterator();
         while (pIter.hasNext()) {
-            Particle p = pIter.next();
-            p.update();
-            particlePaint.setColor(p.color);
-            particlePaint.setAlpha((int)(255 * p.life));
+            Particle p = pIter.next(); p.update();
+            particlePaint.setColor(p.color); particlePaint.setAlpha((int)(255 * p.life));
             canvas.drawCircle(p.x, p.y, p.radius, particlePaint);
             if (p.life <= 0) pIter.remove();
         }
 
+        // GERÇEK BALIK ÇİZİMİ
         if (isFishEating) {
             Paint fishPnt = new Paint(); fishPnt.setColor(Color.parseColor("#FF5722")); fishPnt.setAntiAlias(true);
             Paint eyePaint = new Paint(); eyePaint.setColor(Color.WHITE);
@@ -355,40 +347,40 @@ public class GameBoardView extends View {
 
         Iterator<FloatingText> tIter = floatingTexts.iterator();
         while (tIter.hasNext()) {
-            FloatingText ft = tIter.next();
-            ft.update();
+            FloatingText ft = tIter.next(); ft.update();
             floatingTextPaint.setAlpha((int)(255 * ft.life));
             canvas.drawText(ft.text, ft.x, ft.y, floatingTextPaint);
             if (ft.life <= 0) tIter.remove();
         }
         canvas.restore();
 
-        // OYUN SONU EKRANINI ÇİZ
+        // OYUN SONU EKRANI ÇİZİMİ
         if (isGameOver) {
-            // Yarı saydam siyah arkaplan
             canvas.drawRect(0, 0, getWidth(), getHeight(), overlayPaint);
 
             float dialogWidth = getWidth() * 0.85f;
-            float dialogHeight = 650f;
+            float dialogHeight = 720f;
             float left = (getWidth() - dialogWidth) / 2f;
             float top = (getHeight() - dialogHeight) / 2f;
             float centerX = getWidth() / 2f;
 
-            // Kutu Arkaplanı
             RectF dialogRect = new RectF(left, top, left + dialogWidth, top + dialogHeight);
             canvas.drawRoundRect(dialogRect, 50f, 50f, dialogBgPaint);
 
-            // Yazılar
             canvas.drawText("OYUN BİTTİ!", centerX, top + 130f, gameOverTitlePaint);
-            canvas.drawText("Toplam Puan: " + finalScore, centerX, top + 260f, statTextPaint);
-            canvas.drawText("Bulunan Kelime: " + finalWordCount, centerX, top + 340f, statTextPaint);
-            canvas.drawText("En Uzun: " + finalLongestWord, centerX, top + 420f, statTextPaint);
+            canvas.drawText("Toplam Puan: " + finalScore, centerX, top + 240f, statTextPaint);
+            canvas.drawText("Bulunan Kelime: " + finalWordCount, centerX, top + 310f, statTextPaint);
+            canvas.drawText("En Uzun: " + finalLongestWord, centerX, top + 380f, statTextPaint);
 
-            // Menüye Dön Butonu Çizimi
+            int m = finalDurationSeconds / 60;
+            int s = finalDurationSeconds % 60;
+            String timeStr = String.format("Süre: %02d:%02d", m, s);
+            canvas.drawText(timeStr, centerX, top + 450f, statTextPaint);
+
             float btnWidth = dialogWidth * 0.8f;
             float btnHeight = 110f;
             float btnLeft = centerX - btnWidth / 2f;
-            float btnTop = top + 490f;
+            float btnTop = top + 530f;
             returnMenuButtonRect = new RectF(btnLeft, btnTop, btnLeft + btnWidth, btnTop + btnHeight);
 
             canvas.drawRoundRect(returnMenuButtonRect, 30f, 30f, buttonPaint);
@@ -412,18 +404,17 @@ public class GameBoardView extends View {
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        // EĞER OYUN BİTTİYSE SADECE BUTON TIKLAMALARINI DİNLE
         if (isGameOver) {
             if (event.getAction() == MotionEvent.ACTION_DOWN) {
                 float x = event.getX();
                 float y = event.getY();
                 if (returnMenuButtonRect != null && returnMenuButtonRect.contains(x, y)) {
                     if (gameListener != null) {
-                        gameListener.onReturnToMenu(); // Activity'e haber ver
+                        gameListener.onReturnToMenu();
                     }
                 }
             }
-            return true; // Altındaki gridin dokunmatik olaylarını engeller
+            return true;
         }
 
         if (cells == null || isAnimating || isShuffling || isSwapping || isGravityFalling || isErrorShaking) return false;
@@ -445,9 +436,7 @@ public class GameBoardView extends View {
 
         switch (event.getAction()) {
             case MotionEvent.ACTION_DOWN:
-                clearSelection();
-                touchedCell.isSelected = true;
-                currentPath.add(touchedCell);
+                clearSelection(); touchedCell.isSelected = true; currentPath.add(touchedCell);
                 break;
             case MotionEvent.ACTION_MOVE:
                 if (distanceToCenter < cellSize * 0.45f) continueSelection(touchedCell);
@@ -546,8 +535,7 @@ public class GameBoardView extends View {
         animator.addListener(new AnimatorListenerAdapter() {
             @Override
             public void onAnimationEnd(Animator animation) {
-                isShuffling = false;
-                shuffleProgress = 0f;
+                isShuffling = false; shuffleProgress = 0f;
                 if (gameListener != null) gameListener.onGridAnalyzed(calculateAvailableWords());
             }
         });
@@ -572,15 +560,11 @@ public class GameBoardView extends View {
         List<GridCell> exp = new ArrayList<>();
         for (int r = 0; r < gridSize; r++) {
             for (int c = 0; c < gridSize; c++) {
-                if (cells[r][c].letter != ' ') {
-                    exp.add(cells[r][c]);
-                }
+                if (cells[r][c].letter != ' ') exp.add(cells[r][c]);
             }
         }
 
-        for (int i = 0; i < 8; i++) {
-            spawnParticles(random.nextInt(getWidth()), random.nextInt(getHeight()), 20);
-        }
+        for (int i = 0; i < 8; i++) spawnParticles(random.nextInt(getWidth()), random.nextInt(getHeight()), 20);
         startCameraShake(25f);
 
         startExplosionAnimation(exp);
@@ -592,9 +576,7 @@ public class GameBoardView extends View {
         if (currentPath.isEmpty()) return;
         GridCell lastCell = currentPath.get(currentPath.size() - 1);
         if (currentPath.size() > 1 && cell == currentPath.get(currentPath.size() - 2)) {
-            lastCell.isSelected = false;
-            currentPath.remove(currentPath.size() - 1);
-            return;
+            lastCell.isSelected = false; currentPath.remove(currentPath.size() - 1); return;
         }
         if (!cell.isSelected) {
             if (Math.abs(cell.row - lastCell.row) <= 1 && Math.abs(cell.col - lastCell.col) <= 1) {
@@ -642,15 +624,12 @@ public class GameBoardView extends View {
             List<GridCell> cellsToExplode = new ArrayList<>();
             for (int r = 0; r < gridSize; r++) {
                 for (int c = 0; c < gridSize; c++) {
-                    if (cellsToClear[r][c] && cells[r][c].letter != ' ') {
-                        cellsToExplode.add(cells[r][c]);
-                    }
+                    if (cellsToClear[r][c] && cells[r][c].letter != ' ') cellsToExplode.add(cells[r][c]);
                 }
             }
 
             if (powerToLeave != GridCell.SpecialPower.NONE) {
-                cellsToExplode.remove(lastCell);
-                lastCell.power = powerToLeave;
+                cellsToExplode.remove(lastCell); lastCell.power = powerToLeave;
             }
 
             if (gameListener != null) gameListener.onWordFound(score, word);
@@ -667,14 +646,12 @@ public class GameBoardView extends View {
         ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
         animator.setDuration(400);
         animator.addUpdateListener(animation -> {
-            errorShakeProgress = (float) animation.getAnimatedValue();
-            invalidate();
+            errorShakeProgress = (float) animation.getAnimatedValue(); invalidate();
         });
         animator.addListener(new AnimatorListenerAdapter() {
             @Override
             public void onAnimationEnd(Animator animation) {
-                isErrorShaking = false;
-                clearSelection();
+                isErrorShaking = false; clearSelection();
                 if (gameListener != null) gameListener.onInvalidWord();
             }
         });
@@ -683,23 +660,18 @@ public class GameBoardView extends View {
 
     private void startExplosionAnimation(List<GridCell> cellsToExplode) {
         if (cellsToExplode.isEmpty()) return;
-        isAnimating = true;
-        explodingCells.clear();
-        explodingCells.addAll(cellsToExplode);
+        isAnimating = true; explodingCells.clear(); explodingCells.addAll(cellsToExplode);
 
         ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
         animator.setDuration(400);
         animator.addUpdateListener(animation -> {
-            explosionProgress = (float) animation.getAnimatedValue();
-            invalidate();
+            explosionProgress = (float) animation.getAnimatedValue(); invalidate();
         });
         animator.addListener(new AnimatorListenerAdapter() {
             @Override
             public void onAnimationEnd(Animator animation) {
                 isAnimating = false;
-                for (GridCell cell : explodingCells) {
-                    cell.letter = ' '; cell.power = GridCell.SpecialPower.NONE;
-                }
+                for (GridCell cell : explodingCells) { cell.letter = ' '; cell.power = GridCell.SpecialPower.NONE; }
                 startGravityAnimation();
             }
         });
@@ -711,12 +683,10 @@ public class GameBoardView extends View {
         isGravityFalling = true;
 
         ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
-        animator.setDuration(500);
-        animator.setInterpolator(new BounceInterpolator());
+        animator.setDuration(500); animator.setInterpolator(new BounceInterpolator());
 
         animator.addUpdateListener(animation -> {
-            gravityProgress = (float) animation.getAnimatedValue();
-            invalidate();
+            gravityProgress = (float) animation.getAnimatedValue(); invalidate();
         });
         animator.addListener(new AnimatorListenerAdapter() {
             @Override
@@ -729,21 +699,17 @@ public class GameBoardView extends View {
     }
 
     private void startFishAnimation(List<GridCell> exp) {
-        isFishEating = true;
-        targetFishCells.clear();
-        targetFishCells.addAll(exp);
+        isFishEating = true; targetFishCells.clear(); targetFishCells.addAll(exp);
 
         ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
         animator.setDuration(1500);
         animator.addUpdateListener(animation -> {
-            fishProgress = (float) animation.getAnimatedValue();
-            invalidate();
+            fishProgress = (float) animation.getAnimatedValue(); invalidate();
         });
         animator.addListener(new AnimatorListenerAdapter() {
             @Override
             public void onAnimationEnd(Animator animation) {
-                isFishEating = false;
-                startExplosionAnimation(exp);
+                isFishEating = false; startExplosionAnimation(exp);
             }
         });
         animator.start();
@@ -825,7 +791,6 @@ public class GameBoardView extends View {
                         cells[emptyRow][c].power = cells[r][c].power;
                         cells[r][c].letter = ' ';
                         cells[r][c].power = GridCell.SpecialPower.NONE;
-
                         dropOffsets[emptyRow][c] = emptyRow - r;
                     }
                     emptyRow--;
@@ -833,7 +798,6 @@ public class GameBoardView extends View {
                     emptySpacesCount++;
                 }
             }
-
             for (int r = emptyRow; r >= 0; r--) {
                 cells[r][c].letter = LetterGenerator.getRandomLetter();
                 cells[r][c].power = GridCell.SpecialPower.NONE;
@@ -843,7 +807,9 @@ public class GameBoardView extends View {
     }
 
     private void clearSelection() {
-        for (GridCell cell : currentPath) cell.isSelected = false;
+        for (GridCell cell : currentPath) {
+            cell.isSelected = false;
+        }
         currentPath.clear();
         invalidate();
     }
@@ -909,9 +875,7 @@ public class GameBoardView extends View {
             radius = random.nextFloat() * 8 + 4;
         }
         void update() {
-            x += vx; y += vy;
-            vy += 0.5f;
-            life -= 0.03f;
+            x += vx; y += vy; vy += 0.5f; life -= 0.03f;
         }
     }
 
@@ -928,8 +892,7 @@ public class GameBoardView extends View {
             this.type = type; this.x = x; this.y = y; this.color = color;
         }
         void update() {
-            life -= 0.05f;
-            if (type == EffectType.SHOCKWAVE) radius += 20f;
+            life -= 0.05f; if (type == EffectType.SHOCKWAVE) radius += 20f;
         }
     }
 }
