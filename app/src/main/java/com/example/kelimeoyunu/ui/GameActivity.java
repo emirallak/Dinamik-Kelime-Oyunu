@@ -1,6 +1,7 @@
 package com.example.kelimeoyunu.ui;
 
 import android.app.AlertDialog;
+import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -47,10 +48,25 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
     private Runnable timerRunnable;
     private int currentDurationSeconds = 0;
 
+    // SES EFEKTLERİ VE MÜZİK
+    private MediaPlayer errorSound;
+    private MediaPlayer bgMusic; // Arka plan müziği oynatıcısı
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_game);
+
+        // SES DOSYALARINI YÜKLE (Dosya isimlerini kendine göre düzelt)
+        errorSound = MediaPlayer.create(this, R.raw.yanlis_hamle);
+        bgMusic = MediaPlayer.create(this, R.raw.arka_plan_muzik);
+
+        // ARKA PLAN MÜZİĞİ AYARLARI
+        if (bgMusic != null) {
+            bgMusic.setLooping(true); // Sürekli başa sarsın
+            bgMusic.setVolume(0.15f, 0.15f); // Ses seviyesi %15 (Sakin ve derinden)
+            bgMusic.start(); // Oyuna girer girmez başlasın
+        }
 
         dbHelper = new DatabaseHelper(this);
         appDatabase = AppDatabase.getInstance(this);
@@ -119,6 +135,24 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
         }
     }
 
+    // --- UYGULAMA ALTA ALININCA MÜZİĞİ SUSTUR ---
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (bgMusic != null && bgMusic.isPlaying()) {
+            bgMusic.pause();
+        }
+    }
+
+    // --- OYUNA DÖNÜLÜNCE MÜZİĞİ DEVAM ETTİR ---
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (bgMusic != null && !bgMusic.isPlaying() && !isGameOver) {
+            bgMusic.start();
+        }
+    }
+
     private void startGame() {
         gameBoardView = new GameBoardView(this, null);
         gameBoardContainer.addView(gameBoardView);
@@ -150,6 +184,15 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
 
         remainingMoves--;
         updateUI();
+
+        // HATA SESİNİ ÇAL
+        if (errorSound != null) {
+            if (errorSound.isPlaying()) {
+                errorSound.seekTo(0);
+            }
+            errorSound.start();
+        }
+
         Toast.makeText(this, "Geçersiz kelime! Hamle gitti.", Toast.LENGTH_SHORT).show();
         checkGameOver();
     }
@@ -213,6 +256,11 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
                 timerHandler.removeCallbacks(timerRunnable);
             }
 
+            // OYUN BİTİNCE MÜZİĞİ SUSTUR
+            if (bgMusic != null && bgMusic.isPlaying()) {
+                bgMusic.pause();
+            }
+
             saveCurrentGame();
 
             if (tvAvailableWords != null) {
@@ -225,11 +273,22 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
         }
     }
 
+    // BELLEK YÖNETİMİ: EKRAN KAPANIRKEN SESLERİ TEMİZLE
     @Override
     protected void onDestroy() {
         super.onDestroy();
         if (timerHandler != null && timerRunnable != null) {
             timerHandler.removeCallbacks(timerRunnable);
+        }
+
+        if (errorSound != null) {
+            errorSound.release();
+            errorSound = null;
+        }
+
+        if (bgMusic != null) {
+            bgMusic.release();
+            bgMusic = null;
         }
     }
 
@@ -302,7 +361,7 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
                         prefs.saveInt("USER_GOLD", currentGold - cost);
 
                         JokerEntity joker = appDatabase.appDao().getSpecificJoker(currentUser.id, jokerName);
-                        // HATANIN ÇÖZÜLDÜĞÜ SATIR: 3 Parametreli Constructor Kullanımı
+
                         if (joker == null) {
                             joker = new JokerEntity(currentUser.id, jokerName, 1);
                             appDatabase.appDao().insertJoker(joker);
