@@ -64,7 +64,7 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
         // ARKA PLAN MÜZİĞİ AYARLARI
         if (bgMusic != null) {
             bgMusic.setLooping(true); // Sürekli başa sarsın
-            bgMusic.setVolume(0.15f, 0.15f); // Ses seviyesi %15 (Sakin ve derinden)
+            bgMusic.setVolume(0.12f, 0.12f); // Ses seviyesi %15 (Sakin ve derinden)
             bgMusic.start(); // Oyuna girer girmez başlasın
         }
 
@@ -232,13 +232,13 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
 
     private void showExitConfirmation() {
         new AlertDialog.Builder(this)
-                .setTitle("Oyundan Çık")
-                .setMessage("Oyundan çıkmak istediğinize emin misiniz?")
-                .setPositiveButton("Evet", (dialog, which) -> {
-                    saveCurrentGame();
-                    finish();
+                .setTitle("Oyunu Bitir")
+                .setMessage("Mevcut hamleleriniz iptal edilecek ve oyun bitirilecek. Emin misiniz?")
+                .setPositiveButton("Bitir", (dialog, which) -> {
+                    isGameOver = true;
+                    showGameSummaryAndExit();
                 })
-                .setNegativeButton("Hayır", null)
+                .setNegativeButton("Devam Et", null)
                 .show();
     }
 
@@ -252,25 +252,49 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
         if (remainingMoves <= 0 && !isGameOver) {
             isGameOver = true;
 
+            // 1. ZAMANI DURDUR
             if (timerHandler != null && timerRunnable != null) {
                 timerHandler.removeCallbacks(timerRunnable);
             }
 
-            // OYUN BİTİNCE MÜZİĞİ SUSTUR
+            // 2. MÜZİĞİ SUSTUR
             if (bgMusic != null && bgMusic.isPlaying()) {
                 bgMusic.pause();
             }
 
-            saveCurrentGame();
-
+            // 3. EKRANDAKİ YAZIYI GÜNCELLE
             if (tvAvailableWords != null) {
-                tvAvailableWords.setText("Oyun Bitti!");
+                tvAvailableWords.setText("Hamleniz Bitti!");
             }
 
-            if (gameBoardView != null) {
-                gameBoardView.showGameOverScreen(currentScore, foundWordCount, longestWordFound, currentDurationSeconds);
-            }
+            // 4. ESKİ gameBoardView.showGameOverScreen YERİNE ÖZET EKRANINI ÇAĞIR
+            showGameSummaryAndExit();
         }
+    }
+
+    private void showGameSummaryAndExit() {
+        // 5. OYUNU VERİTABANINA KAYDET
+        saveCurrentGame();
+
+        // 6. SÜREYİ HESAPLA
+        int minutes = currentDurationSeconds / 60;
+        int seconds = currentDurationSeconds % 60;
+        String timeStr = String.format(java.util.Locale.getDefault(), "%02d:%02d", minutes, seconds);
+
+        // 7. ÖZET METNİNİ HAZIRLA VE GÖSTER
+        String summaryMessage = "🎯 Skor: " + currentScore + "\n"
+                + "📝 Bulunan Kelime: " + foundWordCount + "\n"
+                + "👑 En Uzun Kelime: " + (longestWordFound.isEmpty() ? "-" : longestWordFound) + "\n"
+                + "⏱ Geçen Süre: " + timeStr;
+
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Oyun Bitti! 🎉")
+                .setMessage(summaryMessage)
+                .setCancelable(false) // Oyuncu boşluğa tıklayıp kapatamasın
+                .setPositiveButton("Ana Menüye Dön", (dialog, which) -> {
+                    returnToMainMenu();
+                })
+                .show();
     }
 
     // BELLEK YÖNETİMİ: EKRAN KAPANIRKEN SESLERİ TEMİZLE
@@ -350,16 +374,20 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
 
     private void showBuyJokerDialog(String jokerName, int index) {
         int cost = getJokerCost(jokerName);
-        SharedPrefsHelper prefs = new SharedPrefsHelper(this);
-        int currentGold = prefs.getInt("USER_GOLD", 10000);
+
+        // HATA ÇÖZÜMÜ: Artık SharedPrefs değil, direkt gerçek hesaptaki (currentUser) altını çekiyoruz
+        int currentGold = currentUser != null ? currentUser.gold : 0;
 
         new AlertDialog.Builder(this)
                 .setTitle("Joker Satın Al")
                 .setMessage(jokerName + " jokerini " + cost + " altına satın almak istiyor musunuz?\n\nMevcut Altınınız: " + currentGold)
                 .setPositiveButton("Satın Al ve Kullan", (dialog, which) -> {
-                    if (currentGold >= cost) {
-                        prefs.saveInt("USER_GOLD", currentGold - cost);
+                    if (currentUser != null && currentUser.gold >= cost) {
+                        // 1. Parayı gerçek hesaptan düş ve veritabanını güncelle
+                        currentUser.gold -= cost;
+                        appDatabase.appDao().updateUser(currentUser);
 
+                        // 2. Jokeri veritabanına ekle veya sayısını artır
                         JokerEntity joker = appDatabase.appDao().getSpecificJoker(currentUser.id, jokerName);
 
                         if (joker == null) {
@@ -370,10 +398,12 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
                             appDatabase.appDao().updateJoker(joker);
                         }
 
-                        Toast.makeText(this, "Satın alındı! Kalan Altın: " + (currentGold - cost), Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this, "Satın alındı! Kalan Altın: " + currentUser.gold, Toast.LENGTH_SHORT).show();
+
+                        // 3. Jokeri hemen kullan
                         handleJokerSelection(jokerName, index);
                     } else {
-                        Toast.makeText(this, "Yeterli altınınız yok!", Toast.LENGTH_LONG).show();
+                        Toast.makeText(this, "Yeterli altınınız yok! Lütfen ana menüden markete gidip altın alın.", Toast.LENGTH_LONG).show();
                     }
                 })
                 .setNegativeButton("İptal", null)
@@ -416,5 +446,15 @@ public class GameActivity extends AppCompatActivity implements GameBoardView.Gam
                 gameBoardView.usePartyBooster();
                 break;
         }
+    }
+
+
+    private void returnToMainMenu() {
+        // MainActivity yazan yeri senin Ana Menü sınıfının adıyla aynı yap (Eğer farklıysa)
+        android.content.Intent intent = new android.content.Intent(GameActivity.this, MainMenuActivity.class);
+        // Aradaki "Yeni Oyun Kurulum" ekranlarını hafızadan siler atar:
+        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP | android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(intent);
+        finish();
     }
 }

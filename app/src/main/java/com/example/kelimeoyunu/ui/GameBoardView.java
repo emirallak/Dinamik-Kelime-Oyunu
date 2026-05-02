@@ -14,6 +14,7 @@ import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.animation.BounceInterpolator;
+import android.widget.Toast;
 
 import com.example.kelimeoyunu.models.GridCell;
 import com.example.kelimeoyunu.utils.DictionaryManager;
@@ -587,7 +588,8 @@ public class GameBoardView extends View {
 
     private void finishSelection() {
         if (currentPath.size() < 3) {
-            startErrorShakeAnimation();
+            clearSelection();
+            if (gameListener != null) gameListener.onInvalidWord();
             return;
         }
 
@@ -595,14 +597,13 @@ public class GameBoardView extends View {
         for (GridCell cell : currentPath) wordBuilder.append(cell.letter);
         String word = wordBuilder.toString();
 
+        // Eğer seçilen kelime sözlükte varsa
         if (dictionaryManager.isWordValid(word)) {
             int score = ScoreCalculator.calculateComboScore(word, dictionaryManager);
-
             GridCell lastCell = currentPath.get(currentPath.size() - 1);
-            floatingTexts.add(new FloatingText("+" + score + (score > 10 ? " KOMBO!" : ""),
-                    lastCell.col * cellSize + cellSize/2, lastCell.row * cellSize));
 
             List<GridCell> triggeredPowerCells = new ArrayList<>();
+            boolean[][] selectedCells = new boolean[gridSize][gridSize];
             boolean[][] cellsToClear = new boolean[gridSize][gridSize];
 
             GridCell.SpecialPower powerToLeave = GridCell.SpecialPower.NONE;
@@ -612,9 +613,11 @@ public class GameBoardView extends View {
             else if (word.length() >= 7) powerToLeave = GridCell.SpecialPower.MEGA_EXPLODE;
 
             for (GridCell cell : currentPath) {
+                selectedCells[cell.row][cell.col] = true;
                 cellsToClear[cell.row][cell.col] = true;
-                if (cell.power != GridCell.SpecialPower.NONE) triggeredPowerCells.add(cell);
-                spawnParticles(cell.col * cellSize + cellSize/2, cell.row * cellSize + cellSize/2, 10);
+                if (cell.power != GridCell.SpecialPower.NONE) {
+                    triggeredPowerCells.add(cell);
+                }
             }
 
             for (GridCell cell : triggeredPowerCells) {
@@ -622,25 +625,73 @@ public class GameBoardView extends View {
             }
 
             List<GridCell> cellsToExplode = new ArrayList<>();
+            int extraScore = 0;
             for (int r = 0; r < gridSize; r++) {
                 for (int c = 0; c < gridSize; c++) {
-                    if (cellsToClear[r][c] && cells[r][c].letter != ' ') cellsToExplode.add(cells[r][c]);
+                    if (cellsToClear[r][c] && cells[r][c].letter != ' ') {
+                        cellsToExplode.add(cells[r][c]);
+                        if (!selectedCells[r][c]) {
+                            extraScore += ScoreCalculator.getLetterScore(cells[r][c].letter);
+                        }
+                    }
+                }
+            }
+            int totalScore = score + extraScore;
+
+            if (powerToLeave != GridCell.SpecialPower.NONE) {
+                cellsToExplode.remove(lastCell);
+                lastCell.power = powerToLeave;
+            }
+
+            // --- YENİ: KOMBO DETAYLARINI BUL VE EKRANDA GÖSTER (GÜNCEL TOAST) ---
+            StringBuilder breakdownText = new StringBuilder();
+            int comboCount = 0;
+
+            // Kelimenin içindeki 3 harften büyük tüm alt kombinasyonları tara
+            for (int i = 0; i <= word.length() - 3; i++) {
+                for (int j = i + 3; j <= word.length(); j++) {
+                    String subWord = word.substring(i, j);
+
+                    // Alt kelime sözlükte var mı?
+                    if (dictionaryManager.isWordValid(subWord)) {
+                        int subScore = 0;
+                        // Alt kelimenin harf puanlarını topla
+                        for (int k = 0; k < subWord.length(); k++) {
+                            subScore += ScoreCalculator.getLetterScore(subWord.charAt(k));
+                        }
+                        // Kelimeleri yan yana virgülle ayırarak ekliyoruz
+                        breakdownText.append(subWord).append(" (").append(subScore).append("), ");
+                        comboCount++;
+                    }
                 }
             }
 
-            if (powerToLeave != GridCell.SpecialPower.NONE) {
-                cellsToExplode.remove(lastCell); lastCell.power = powerToLeave;
-            }
+            // Eğer birden fazla kelime bulunduysa (yani kombo varsa) listeyi göster
+            if (comboCount > 1) {
+                // Sondaki fazladan virgül ve boşluğu temizle
+                String finalText = breakdownText.toString();
+                if (finalText.endsWith(", ")) {
+                    finalText = finalText.substring(0, finalText.length() - 2);
+                }
 
-            if (gameListener != null) gameListener.onWordFound(score, word);
+                // Tek satırda güvenli gösterim
+                Toast.makeText(getContext(), "🌟 KOMBO: " + finalText, Toast.LENGTH_LONG).show();
+            } else {
+                // Tek kelimeyse sadece onu göster
+                Toast.makeText(getContext(), "✅ " + word + " (" + totalScore + " Puan)", Toast.LENGTH_SHORT).show();
+            }
+            // --------------------------------------------------------
+            // --------------------------------------------------------
+
+            if (gameListener != null) gameListener.onWordFound(totalScore, word);
 
             clearSelection();
             startExplosionAnimation(cellsToExplode);
         } else {
-            startErrorShakeAnimation();
+            if (gameListener != null) gameListener.onInvalidWord();
+            clearSelection();
         }
     }
-
     private void startErrorShakeAnimation() {
         isErrorShaking = true;
         ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
