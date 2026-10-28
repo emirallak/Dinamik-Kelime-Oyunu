@@ -59,4 +59,4 @@ app/src/main/assets/words.txt   # Türkçe sözlük
 
 ## Geliştirici
 
-**Muhammed Emir Allak**: [GitHub](https://github.com/emirallak) · [LinkedIn](www.linkedin.com/in/muhammed-emir-allak-a445a3246/)
+**Muhammed Emir Allak**: [GitHub](https://github.com/emirallak) · [LinkedIn](https://www.linkedin.com/in/muhammed-emir-allak-a445a3246/)
